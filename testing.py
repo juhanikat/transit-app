@@ -1,116 +1,81 @@
-from matplotlib import pyplot as plt
-from matplotlib import axes
-from matplotlib.lines import Line2D
-from matplotlib.backend_bases import MouseButton
-from matplotlib.collections import PatchCollection
-import math
-import numpy as np
-from matplotlib.figure import Figure
-import matplotlib
-
 import matplotlib.pyplot as plt
+from matplotlib.backend_bases import MouseButton
+from shapely.geometry import LineString, Point, Polygon
+"""
+# Create a line representing a road
+road = LineString([(0, 0), (1, 2), (2, 3), (4, 4)])
 
-from matplotlib.patches import PathPatch
-from matplotlib.path import Path
+# Plot the road
+x, y = road.xy
+plt.plot(x, y, label='Road')
+
+# Define points on the road
+point_a = Point(1, 2)
+point_b = Point(2, 3)
+
+# Plot the points
+plt.plot(*point_a.xy, 'go', label='Point A')
+plt.plot(*point_b.xy, 'ro', label='Point B')
+
+# Calculate the distance between the points on the road
+distance = point_a.distance(point_b)
+print(f"Distance between points A and B: {distance}")
+"""
+
+hb_size = 0.3
 
 
-matplotlib.use('TKAgg')
+class MyPoint:
+    """This should be subclassing Point but it doesn't work with Shapely? I guess\n
+    use <p> attribute to access the actual point"""
+
+    def __init__(self, x, y):
+        self.p = Point(x, y)
+        b = self.p.bounds
+        self.hitbox = Polygon([(b[0] - hb_size, b[1] - hb_size), (b[0] - hb_size, b[3] + hb_size),
+                              (b[2] + hb_size, b[3] + hb_size), (b[2] + hb_size, b[1] - hb_size)])
 
 
-class Network:
-    """Holds the entire road network."""
+class Hmmm:
 
-    def __init__(self, figure: Figure, ax: axes.Axes) -> None:
-        self.figure = figure
-        self.ax = ax
-        self.patches = []
+    def __init__(self) -> None:
+        self.fig, self.ax = plt.subplots()
+        self.ax.set_xlim(0, 10)
+        self.ax.set_ylim(0, 10)
+
+        self.points = []
         self.roads = []
-        self.temp_road = None
+        self.current_road_points = []
 
-    def get_ax(self):
-        return self.ax
+    def onclick(self, event):
+        print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+              ('double' if event.dblclick else 'single', event.button,
+               event.x, event.y, event.xdata, event.ydata))
+        if event.button == MouseButton.RIGHT:
+            new_road = LineString([(point.p.x, point.p.y)
+                                  for point in self.current_road_points])
+            x, y = new_road.xy
+            self.ax.plot(x, y)
+            self.current_road_points.clear()
+        else:
+            point = MyPoint(event.xdata, event.ydata)
+            for other_point in self.points:
+                hitbox = other_point.hitbox
+                if point.p.within(hitbox):
+                    print("on")
 
-    def get_roads(self):
-        return self.roads
+            self.current_road_points.append(point)
+            self.points.append(point)
+            self.ax.plot(*point.p.xy, "bo")
+            self.ax.plot(*point.hitbox.exterior.xy)
 
-    def clear_temp_road(self):
-        self.temp_road = None
-
-    def set_temp_road(self, verts: list):
-        codes = [Path.MOVETO]
-        codes += [Path.LINETO for _ in range(len(verts) - 1)]
-        path = Path(verts, codes)
-        self.temp_road = path
-
-    def add_road(self, verts: list):
-        codes = [Path.MOVETO]
-        codes += [Path.LINETO for _ in range(len(verts) - 1)]
-        path = Path(verts, codes)
-        self.roads.append(path)
-
-    def display(self):
-        for patch in self.ax.patches:
-            print(patch)
-            patch.remove()
-
-        patches = []
-        for road in self.get_roads():
-            patch = PathPatch(road, facecolor=(
-                0, 0, 0, 0), edgecolor=(0, 0, 0, 0.2))
-            patches.append(patch)
-
-        if self.temp_road:
-            patch = PathPatch(self.temp_road, facecolor=(
-                0, 0, 0, 0), edgecolor=(0, 0, 0, 0.2))
-            patches.append(patch)
-        for patch in patches:
-            self.ax.add_patch(patch)
+    def main(self):
+        event = self.fig.canvas.mpl_connect('button_press_event', self.onclick)
+        # Show the plot
+        plt.ion()
+        plt.show(block=True)
 
 
-class LineBuilder:
-    def __init__(self, network: Network):
-        self.ax = network.get_ax()
-        self.network = network
-        self.currently_building = None
-        self.length = 0
-        self.patch = None
-        self.verts = []
-        self.codes = []
-        self.cid = self.ax.figure.canvas.mpl_connect(
-            'button_press_event', self.add_point)
-        self.cid = self.ax.figure.canvas.mpl_connect(
-            'button_press_event', self.finish_building)
-
-    def add_point(self, event):
-        if event.button != MouseButton.RIGHT:
-            return
-        if event.inaxes != self.ax:
-            return
-        if not self.currently_building:
-            self.currently_building = []
-        if len(self.verts) > 0:
-            self.length += math.sqrt(abs(self.verts[-1][0] - event.xdata) + abs(
-                self.verts[-1][1] - event.ydata))
-        self.currently_building.append((event.xdata, event.ydata))
-        self.network.set_temp_road(self.currently_building)
-        self.network.display()
-
-    def finish_building(self, event):
-        if event.button != MouseButton.LEFT:
-            return
-        if event.inaxes != self.ax:
-            return
-        if not self.currently_building:
-            return
-
-        self.network.clear_temp_road()
-        self.network.add_road(self.currently_building)
-        self.currently_building = None
-        self.network.display()
-
-
-fig, ax = plt.subplots()
-ax.set_title('click to build line segments')
-linebuilder = LineBuilder(Network(fig, ax))
-plt.ion()
-plt.show(block=True)
+if __name__ == "__main__":
+    h = Hmmm()
+    h.main()
