@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Point, Polygon, box
+from shapely import intersection, equals
+from shapely.geometry.multipoint import MultiPoint
 """
 # Create a line representing a road
 road = LineString([(0, 0), (1, 2), (2, 3), (4, 4)])
@@ -23,17 +25,15 @@ print(f"Distance between points A and B: {distance}")
 """
 
 hb_size = 0.3
+normal_p_color = "b"
+selected_p_color = "r"
+intersection_p_color = "g"
 
 
-class MyPoint:
-    """This should be subclassing Point but it doesn't work with Shapely? I guess\n
-    use <p> attribute to access the actual point"""
-
-    def __init__(self, x, y):
-        self.p = Point(x, y)
-        b = self.p.bounds
-        self.hitbox = Polygon([(b[0] - hb_size, b[1] - hb_size), (b[0] - hb_size, b[3] + hb_size),
-                              (b[2] + hb_size, b[3] + hb_size), (b[2] + hb_size, b[1] - hb_size)])
+def create_hitbox(point: Point) -> Polygon:
+    b = point.bounds
+    new_b = (b[0] - hb_size, b[1] - hb_size, b[2] + hb_size, b[3] + hb_size)
+    return box(*new_b)
 
 
 class Hmmm:
@@ -43,31 +43,87 @@ class Hmmm:
         self.ax.set_xlim(0, 10)
         self.ax.set_ylim(0, 10)
 
-        self.points = []
-        self.roads = []
-        self.current_road_points = []
+        self.points = []  # Points
+        self.roads = []  # LineStrings
+        self.current_road_points = []  # Points
+        self.plotted_points = {}  # (Point: plotted point) pairs
+        self.crossroads = []  # Points
+
+    def reset_plotted_point_colors(self):
+        for plotted_point in self.plotted_points.values():
+            plotted_point.set_color(normal_p_color)
+
+    def crossroad_already_exists(self, crossroad: Point):
+        for existing_crossroad in self.crossroads:
+            if equals(crossroad, existing_crossroad):
+                return True
+        return False
+
+    def create_crossroads(self):
+        """Checks points where two roads intersect and adds crossroads there."""
+        for road in self.roads:
+            for other_road in self.roads:
+                if road != other_road and bool(intersection(road, other_road)):
+                    crossroads = intersection(road, other_road)
+                    if type(crossroads) is MultiPoint:
+                        for point in crossroads.geoms:
+                            # prevents duplicate crossroads
+                            if not self.crossroad_already_exists(point):
+                                self.crossroads.append(point)
+                                self.ax.plot(
+                                    *point.xy, f"{intersection_p_color}o")
+                    else:
+                        # prevents duplicate crossroads
+                        if not self.crossroad_already_exists(crossroads):
+                            self.crossroads.append(crossroads)
+                            self.ax.plot(*crossroads.xy,
+                                         f"{intersection_p_color}o")
+
+    def add_point_to_road(self, point: Point):
+        """Adds a point to the road that is currently building."""
+        for other_point in self.points:
+            hitbox = create_hitbox(other_point)
+            if point.within(hitbox):
+                if len(self.current_road_points) > 0:
+                    # a road can only use an existing point as a starting point
+                    return
+                else:
+                    # sets an existing point as the starting point of a new road
+                    self.plotted_points[other_point].set_color(
+                        selected_p_color)
+                    self.current_road_points.append(other_point)
+                    return
+
+        self.reset_plotted_point_colors()
+        self.current_road_points.append(point)
+        self.points.append(point)
+        plotted_point = self.ax.plot(*point.xy, f"{normal_p_color}o")[0]
+        self.plotted_points[point] = plotted_point
+        self.ax.plot(*create_hitbox(point).exterior.xy)
+
+    def finish_road(self):
+        """Creates new road."""
+        if len(self.current_road_points) < 2:
+            return
+        new_road = LineString([(point.x, point.y)
+                               for point in self.current_road_points])
+        self.roads.append(new_road)
+        x, y = new_road.xy
+        self.ax.plot(x, y)
+        self.current_road_points.clear()
+        self.create_crossroads()
 
     def onclick(self, event):
         print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
               ('double' if event.dblclick else 'single', event.button,
                event.x, event.y, event.xdata, event.ydata))
         if event.button == MouseButton.RIGHT:
-            new_road = LineString([(point.p.x, point.p.y)
-                                  for point in self.current_road_points])
-            x, y = new_road.xy
-            self.ax.plot(x, y)
-            self.current_road_points.clear()
+            self.finish_road()
+        elif event.button == MouseButton.LEFT:
+            point = Point(event.xdata, event.ydata)
+            self.add_point_to_road(point)
         else:
-            point = MyPoint(event.xdata, event.ydata)
-            for other_point in self.points:
-                hitbox = other_point.hitbox
-                if point.p.within(hitbox):
-                    print("on")
-
-            self.current_road_points.append(point)
-            self.points.append(point)
-            self.ax.plot(*point.p.xy, "bo")
-            self.ax.plot(*point.hitbox.exterior.xy)
+            print("Invalid input!")
 
     def main(self):
         event = self.fig.canvas.mpl_connect('button_press_event', self.onclick)
