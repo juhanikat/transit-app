@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.10"
 shapely = "^2.0.4"
 matplotlib = "^3.9.1"
+mplcursors = "^0.5.3"
 
 
 [build-system]

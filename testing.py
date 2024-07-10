@@ -3,6 +3,7 @@ from matplotlib.backend_bases import MouseButton
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely import intersection, equals
 from shapely.geometry.multipoint import MultiPoint
+import mplcursors
 """
 # Create a line representing a road
 road = LineString([(0, 0), (1, 2), (2, 3), (4, 4)])
@@ -36,6 +37,13 @@ def create_hitbox(point: Point) -> Polygon:
     return box(*new_b)
 
 
+def new_road_name():
+    num = 0
+    while True:
+        num += 1
+        yield num
+
+
 class Hmmm:
 
     def __init__(self) -> None:
@@ -48,6 +56,15 @@ class Hmmm:
         self.current_road_points = []  # Points
         self.plotted_points = {}  # (Point: plotted point) pairs
         self.crossroads = []  # Points
+
+    def create_cursor(self):
+        """Needs to be recreated every time new data is added?"""
+        def joku(sel):
+            sel.annotation.set_text(sel.artist)
+
+        cursor = mplcursors.cursor(hover=True)
+        cursor.connect(
+            "add", lambda sel: joku(sel))
 
     def reset_plotted_point_colors(self):
         for plotted_point in self.plotted_points.values():
@@ -107,11 +124,14 @@ class Hmmm:
             return
         new_road = LineString([(point.x, point.y)
                                for point in self.current_road_points])
+        print(new_road.project(self.points[2]))
         self.roads.append(new_road)
         x, y = new_road.xy
-        self.ax.plot(x, y)
+        self.ax.plot(
+            x, y, label=f"Road {next(new_road_name())}, length {new_road.length}")
         self.current_road_points.clear()
         self.create_crossroads()
+        self.create_cursor()
 
     def onclick(self, event):
         print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
@@ -127,6 +147,7 @@ class Hmmm:
 
     def main(self):
         event = self.fig.canvas.mpl_connect('button_press_event', self.onclick)
+
         # Show the plot
         plt.ion()
         plt.show(block=True)
