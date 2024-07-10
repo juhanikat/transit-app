@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
 from shapely.geometry import LineString, Point, Polygon, box
-from shapely import intersection, equals
+from shapely.ops import nearest_points
+from shapely import intersection, equals, snap
 from shapely.geometry.multipoint import MultiPoint
 import mplcursors
 """
@@ -29,6 +30,7 @@ hb_size = 0.3
 normal_p_color = "b"
 selected_p_color = "r"
 intersection_p_color = "g"
+calculation_p_color = "c"
 
 
 def create_hitbox(point: Point) -> Polygon:
@@ -37,11 +39,14 @@ def create_hitbox(point: Point) -> Polygon:
     return box(*new_b)
 
 
-def new_road_name():
-    num = 0
-    while True:
-        num += 1
-        yield num
+class Counter:
+    def __init__(self):
+        self.count = 1
+
+    def __call__(self):
+        val = self.count
+        self.count += 1
+        return val
 
 
 class Hmmm:
@@ -56,6 +61,10 @@ class Hmmm:
         self.current_road_points = []  # Points
         self.plotted_points = {}  # (Point: plotted point) pairs
         self.crossroads = []  # Points
+        self.calculation_points = {}
+        self.plotted_calculation_points = []
+
+        self.counter = Counter()
 
     def create_cursor(self):
         """Needs to be recreated every time new data is added?"""
@@ -118,6 +127,45 @@ class Hmmm:
         self.plotted_points[point] = plotted_point
         self.ax.plot(*create_hitbox(point).exterior.xy)
 
+    def add_calculation_point(self, point: Point):
+        """Adds a point that distance is measured from, or to. After adding two points, the next point will remove the previous two.
+        Points currently have to be on the same linestring."""
+        if len(self.calculation_points) == 2:
+            self.calculation_points.clear()
+            for plotted_point in self.plotted_calculation_points:
+                plotted_point = plotted_point[0]
+                plotted_point.remove()
+            self.plotted_calculation_points.clear()
+        for road in self.roads:
+            nearest_on_road = nearest_points(point, road)[1]
+            snapped_point = snap(point, nearest_on_road, tolerance=0.7)
+            # if calculation point is close enough to any road to snap to it
+            if snapped_point != point:
+                point = snapped_point
+                # print(road.project(point))
+                if len(self.calculation_points) == 0:
+                    self.calculation_points[0] = (
+                        point, road.project(point), road)
+                elif len(self.calculation_points) == 1:
+                    self.calculation_points[1] = (
+                        point, road.project(point), road)
+                    if road != self.calculation_points[0][2]:
+                        self.calculation_points.clear()
+                        for plotted_point in self.plotted_calculation_points:
+                            plotted_point = plotted_point[0]
+                            plotted_point.remove()
+                        self.plotted_calculation_points.clear()
+                        print(
+                            "Points are on two different linestrings, not supported yet!")
+                        return False
+                    print(
+                        f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
+                plotted_point = self.ax.plot(
+                    *point.xy, f"{calculation_p_color}o")
+                self.plotted_calculation_points.append(plotted_point)
+                return True
+        return False
+
     def finish_road(self):
         """Creates new road."""
         if len(self.current_road_points) < 2:
@@ -128,7 +176,7 @@ class Hmmm:
         self.roads.append(new_road)
         x, y = new_road.xy
         self.ax.plot(
-            x, y, label=f"Road {next(new_road_name())}, length {new_road.length}")
+            x, y, label=f"Road {self.counter()}, length {new_road.length}")
         self.current_road_points.clear()
         self.create_crossroads()
         self.create_cursor()
@@ -142,6 +190,9 @@ class Hmmm:
         elif event.button == MouseButton.LEFT:
             point = Point(event.xdata, event.ydata)
             self.add_point_to_road(point)
+        elif event.button == MouseButton.MIDDLE:
+            point = Point(event.xdata, event.ydata)
+            self.add_calculation_point(point)
         else:
             print("Invalid input!")
 
