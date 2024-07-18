@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
-from matplotlib.backend_bases import MouseButton
-from shapely.geometry import LineString, Point, Polygon, box, MultiLineString
-from shapely.ops import nearest_points
-from shapely import intersection, equals, snap, line_merge
-from shapely.geometry.multipoint import MultiPoint
 import mplcursors
+from matplotlib.backend_bases import MouseButton, KeyEvent
+from shapely import equals, intersection, line_merge, snap
+from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
+from shapely.geometry.multipoint import MultiPoint
+from shapely.ops import nearest_points
+
 """
 # Create a line representing a road
 road = LineString([(0, 0), (1, 2), (2, 3), (4, 4)])
@@ -51,6 +52,29 @@ class Counter:
         return val
 
 
+class DFS:
+    def __init__(self, nodes):
+        self.nodes = nodes
+        self.graph = {node: [] for node in nodes}
+
+    def add_edge(self, a, b):
+        self.graph[a].append(b)
+        self.graph[b].append(a)
+
+    def visit(self, node):
+        if node in self.visited:
+            return
+        self.visited.add(node)
+
+        for next_node in self.graph[node]:
+            self.visit(next_node)
+
+    def search(self, start_node):
+        self.visited = set()
+        self.visit(start_node)
+        return self.visited
+
+
 class Hmmm:
 
     def __init__(self) -> None:
@@ -65,6 +89,7 @@ class Hmmm:
         self.plotted_points = {}  # (Point: plotted point) pairs
         self.plotted_lines = {}  # (LineString: plotted Line2D) pairs
         self.crossroads = []  # Points
+        # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
         self.calculation_points = {}
         self.plotted_calculation_points = []
 
@@ -86,6 +111,26 @@ class Hmmm:
     def crossroad_already_exists(self, crossroad: Point):
         for existing_crossroad in self.crossroads:
             if equals(crossroad, existing_crossroad):
+                return True
+        return False
+
+    def connected(self, point1: Point, point2: Point):
+        dfs = DFS(self.roads)
+        start_road = None
+        road: LineString
+        for road in self.roads:
+            if point1.dwithin(road, 1e-8):
+                start_road = road
+            other_road: LineString
+            for other_road in self.roads:
+                if not (road is other_road) and road.crosses(other_road):
+                    dfs.add_edge(road, other_road)
+        if not start_road:
+            print("point 1 is not on any road!")
+            return
+        visited_roads = dfs.search(start_road)
+        for visited_road in visited_roads:
+            if point2.dwithin(visited_road, 1e-8):
                 return True
         return False
 
@@ -115,7 +160,6 @@ class Hmmm:
         if len(self.calculation_points) == 2:
             self.calculation_points.clear()
             for plotted_point in self.plotted_calculation_points:
-                plotted_point = plotted_point[0]
                 plotted_point.remove()
             self.plotted_calculation_points.clear()
         for road in self.roads:
@@ -134,7 +178,6 @@ class Hmmm:
                     if road != self.calculation_points[0][2]:
                         self.calculation_points.clear()
                         for plotted_point in self.plotted_calculation_points:
-                            plotted_point = plotted_point[0]
                             plotted_point.remove()
                         self.plotted_calculation_points.clear()
                         print(
@@ -142,6 +185,8 @@ class Hmmm:
                         return False
                     print(
                         f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
+                    print(self.connected(
+                        self.calculation_points[0][0], self.calculation_points[1][0]))
                 plotted_point = self.ax.plot(
                     *point.xy, f"{calculation_p_color}o")[0]
                 self.plotted_calculation_points.append(plotted_point)
@@ -229,8 +274,15 @@ class Hmmm:
         else:
             print("Invalid input!")
 
+    def onkey(self, event):
+        if event.key == "c":
+            print(self.connected(self.points[0], self.points[1]))
+        else:
+            print("Invalid input!")
+
     def main(self):
-        event = self.fig.canvas.mpl_connect('button_press_event', self.onclick)
+        self.fig.canvas.mpl_connect('button_press_event', self.onclick)
+        self.fig.canvas.mpl_connect('key_press_event', self.onkey)
 
         # Show the plot
         plt.ion()
