@@ -114,12 +114,15 @@ class Hmmm:
                 return True
         return False
 
-    def connected(self, point1: Point, point2: Point):
+    def find_shortest_path(self, point1: Point, point2: Point):
+        """Finds the shortest path between point1 and point2 along a road."""
         dfs = DFS(self.roads)
         start_road = None
         road: LineString
         for road in self.roads:
             if point1.dwithin(road, 1e-8):
+                nearest_on_road = nearest_points(point1, road)[1]
+                point1 = nearest_on_road
                 start_road = road
             other_road: LineString
             for other_road in self.roads:
@@ -129,8 +132,46 @@ class Hmmm:
             print("point 1 is not on any road!")
             return
         visited_roads = dfs.search(start_road)
+        visited_road: LineString
         for visited_road in visited_roads:
             if point2.dwithin(visited_road, 1e-8):
+                nearest_on_road = nearest_points(point2, road)[1]
+                point2 = nearest_on_road
+                end_road = visited_road
+                print(start_road.coords[0])
+                print(end_road.coords[-1])
+                # return True
+        # return False
+
+    def shared_coords(self, road1: LineString, road2: LineString):
+        """Returns True if road1 and road2 share any coordinates, or False otherwise.
+        Coordinates are the turning points of the road, not every coordinate that is covered by the LineString."""
+        for coord1 in road1.coords:
+            for coord2 in road2.coords:
+                if coord1 == coord2:
+                    return True
+        return False
+
+    def connected(self, point1: Point, point2: Point):
+        dfs = DFS(self.roads)
+        start_road = None
+        road: LineString
+        for road in self.roads:
+            if point1.dwithin(road, 1e-8):
+                start_road = road
+            other_road: LineString
+            for other_road in self.roads:
+                if not (road is other_road) and (road.crosses(other_road) or self.shared_coords(road, other_road)):
+                    # could be cleaned up?
+                    if other_road not in dfs.graph[road]:
+                        dfs.add_edge(road, other_road)
+        if not start_road:
+            print("point 1 is not on any road!")
+            return
+        visited_roads = dfs.search(start_road)
+        for visited_road in visited_roads:
+            if point2.dwithin(visited_road, 1e-8):
+                print(dfs.graph)
                 return True
         return False
 
@@ -157,6 +198,7 @@ class Hmmm:
     def add_calculation_point(self, point: Point):
         """Adds a point that distance is measured from, or to. After adding two points, the next point will remove the previous two.
         Points currently have to be on the same linestring."""
+        different_linestrings = False
         if len(self.calculation_points) == 2:
             self.calculation_points.clear()
             for plotted_point in self.plotted_calculation_points:
@@ -168,7 +210,6 @@ class Hmmm:
             # if calculation point is close enough to any road to snap to it
             if snapped_point != point:
                 point = snapped_point
-                # print(road.project(point))
                 if len(self.calculation_points) == 0:
                     self.calculation_points[0] = (
                         point, road.project(point), road)
@@ -176,17 +217,16 @@ class Hmmm:
                     self.calculation_points[1] = (
                         point, road.project(point), road)
                     if road != self.calculation_points[0][2]:
-                        self.calculation_points.clear()
-                        for plotted_point in self.plotted_calculation_points:
-                            plotted_point.remove()
-                        self.plotted_calculation_points.clear()
                         print(
-                            "Points are on two different linestrings, not supported yet!")
-                        return False
+                            "Points are on two different linestrings, distance not supported yet!")
+                        different_linestrings = True
+                    if not different_linestrings:
+                        print(
+                            f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
                     print(
-                        f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
-                    print(self.connected(
-                        self.calculation_points[0][0], self.calculation_points[1][0]))
+                        f"Connected: {self.connected(self.calculation_points[0][0], self.calculation_points[1][0])}")
+                    print(
+                        f"Pathfinding: {self.find_shortest_path(self.calculation_points[0][0], self.calculation_points[1][0])}")
                 plotted_point = self.ax.plot(
                     *point.xy, f"{calculation_p_color}o")[0]
                 self.plotted_calculation_points.append(plotted_point)
@@ -213,6 +253,8 @@ class Hmmm:
             plotted_point = self.ax.plot(*point.xy, f"{normal_p_color}o")[0]
             self.plotted_points[point] = plotted_point
             self.ax.plot(*create_hitbox(point).exterior.xy)
+            if len(self.current_road_points) == 2:
+                self.add_road()
         else:
             if len(self.current_road_points) > 0:
                 # only the starting point of the new road can be an existing point
@@ -234,12 +276,11 @@ class Hmmm:
                             print(
                                 "Continuing existing road, will be merged when finished")
 
-    def finish_road(self):
-        """Creates new road. Also merges it with an existing one if they connect."""
-        if len(self.current_road_points) < 2:
-            return
+    def add_road(self):
+        """Creates new road."""
         new_road = LineString([(point.x, point.y)
                                for point in self.current_road_points])
+        """
         if self.current_road_connects_to:
             # join the new and existing roads together, then delete the existing road from roads and the plot too
             new_road = MultiLineString(
@@ -248,6 +289,7 @@ class Hmmm:
             self.plotted_lines[self.current_road_connects_to].remove()
             self.roads.remove(self.current_road_connects_to)
             self.current_road_connects_to = None
+        """
         self.roads.append(new_road)
         x, y = new_road.xy
         plotted_line = self.ax.plot(
@@ -257,6 +299,10 @@ class Hmmm:
         self.create_crossroads()
         self.create_cursor()
         print(f"Amount of roads: {len(self.roads)}")
+
+    def finish_road(self):
+        """Cancel road building mode."""
+        pass
 
     def onclick(self, event):
         if print_click_info:
@@ -275,6 +321,7 @@ class Hmmm:
             print("Invalid input!")
 
     def onkey(self, event):
+        return
         if event.key == "c":
             print(self.connected(self.points[0], self.points[1]))
         else:
