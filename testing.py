@@ -1,3 +1,4 @@
+import heapq
 import matplotlib.pyplot as plt
 import mplcursors
 from matplotlib.backend_bases import MouseButton, KeyEvent
@@ -75,6 +76,40 @@ class DFS:
         return self.visited
 
 
+class Dijkstra:
+    def __init__(self, nodes):
+        self.nodes = nodes
+        self.graph = {node: [] for node in nodes}
+
+    def add_edge(self, node_a, node_b, weight):
+        self.graph[node_a].append((node_b, weight))
+
+    def find_distances(self, start_node):
+        distances = {}
+        for node in self.nodes:
+            distances[node] = float("inf")
+        distances[start_node] = 0
+
+        queue = []
+        heapq.heappush(queue, (0, start_node))
+
+        visited = set()
+        while queue:
+            node_a = heapq.heappop(queue)[1]
+            if node_a in visited:
+                continue
+            visited.add(node_a)
+
+            for node_b, weight in self.graph[node_a]:
+                new_distance = distances[node_a] + weight
+                if new_distance < distances[node_b]:
+                    distances[node_b] = new_distance
+                    new_pair = (new_distance, node_b)
+                    heapq.heappush(queue, new_pair)
+
+        return distances
+
+
 class Hmmm:
 
     def __init__(self) -> None:
@@ -108,6 +143,14 @@ class Hmmm:
         for plotted_point in self.plotted_points.values():
             plotted_point.set_color(normal_p_color)
 
+    def remove_road(self, road):
+        "Removes road and the plotted line which corresponds to road."
+        self.roads.remove(road)
+        if road not in self.plotted_lines.keys():
+            print("ROAD DOES NOT EXIST IN PLOTTED LINES DICTIONARY, CANNOT DELETE!")
+        self.plotted_lines[road].remove()
+        del self.plotted_lines[road]
+
     def crossroad_already_exists(self, crossroad: Point):
         for existing_crossroad in self.crossroads:
             if equals(crossroad, existing_crossroad):
@@ -115,32 +158,37 @@ class Hmmm:
         return False
 
     def find_shortest_path(self, point1: Point, point2: Point):
-        """Finds the shortest path between point1 and point2 along a road."""
-        dfs = DFS(self.roads)
+        """Finds the shortest path between point1 and point2 along a road. Uses Dijkstra's algorithm. Returns the roads that make up the path."""
+        d = Dijkstra(self.roads)
         start_road = None
+        end_road = None
+        # create edges for graph
         road: LineString
         for road in self.roads:
+            print("juu")
             if point1.dwithin(road, 1e-8):
                 nearest_on_road = nearest_points(point1, road)[1]
                 point1 = nearest_on_road
                 start_road = road
+            if point2.dwithin(road, 1e-8):
+                nearest_on_road = nearest_points(point2, road)[1]
+                point2 = nearest_on_road
+                end_road = road
             other_road: LineString
             for other_road in self.roads:
-                if not (road is other_road) and road.crosses(other_road):
-                    dfs.add_edge(road, other_road)
+                if not (road is other_road) and (road.crosses(other_road) or self.shared_coords(road, other_road)):
+                    print("joo")
+                    d.add_edge(road, other_road,
+                               other_road.length)
+
         if not start_road:
             print("point 1 is not on any road!")
             return
-        visited_roads = dfs.search(start_road)
-        visited_road: LineString
-        for visited_road in visited_roads:
-            if point2.dwithin(visited_road, 1e-8):
-                nearest_on_road = nearest_points(point2, road)[1]
-                point2 = nearest_on_road
-                end_road = visited_road
-                print(start_road.coords[0])
-                print(end_road.coords[-1])
-                # return True
+
+        distances = d.find_distances(start_road)
+        print(f"Distances: {distances}")
+        print(f"Distance to end: {distances[end_road] + start_road.length}")
+        # return True
         # return False
 
     def shared_coords(self, road1: LineString, road2: LineString):
@@ -175,9 +223,38 @@ class Hmmm:
                 return True
         return False
 
+    def split_road_in_two_halves(self, road, split_point):
+        print(self.crossroads)
+        print(road.coords[0])
+        print(split_point.coords[0])
+        print(road.coords[1])
+        new_road_1 = LineString([road.coords[0], split_point.coords[0]])
+        new_road_2 = LineString([split_point.coords[0], road.coords[1]])
+
+        self.remove_road(road)
+        self.roads.append(new_road_1)
+        self.roads.append(new_road_2)
+
+        x, y = new_road_1.xy
+        plotted_line = self.ax.plot(
+            x, y, label=f"Road {self.counter()}, length {new_road_1.length}")[0]
+        self.plotted_lines[new_road_1] = plotted_line
+
+        x, y = new_road_2.xy
+        plotted_line = self.ax.plot(
+            x, y, label=f"Road {self.counter()}, length {new_road_2.length}")[0]
+        self.plotted_lines[new_road_2] = plotted_line
+
+        self.current_road_points.clear()
+        self.create_crossroads()
+        self.create_cursor()
+        print(f"Amount of roads: {len(self.roads)}")
+
     def create_crossroads(self):
-        """Checks points where two roads intersect and adds crossroads there."""
+        """Checks points where two roads intersect and adds crossroads there. Crossroad splits the existing roads."""
+        updated = {}  # road: crossroads pairs, can't update them inside for loops because new roads get added, which extends the loops
         for road in self.roads:
+            updated[road] = []
             for other_road in self.roads:
                 if road != other_road and bool(intersection(road, other_road)):
                     crossroads = intersection(road, other_road)
@@ -186,14 +263,19 @@ class Hmmm:
                             # prevents duplicate crossroads
                             if not self.crossroad_already_exists(point):
                                 self.crossroads.append(point)
+                                updated[road].append(crossroads)
                                 self.ax.plot(
                                     *point.xy, f"{intersection_p_color}o")
                     else:
                         # prevents duplicate crossroads
                         if not self.crossroad_already_exists(crossroads):
                             self.crossroads.append(crossroads)
+                            updated[road].append(crossroads)
                             self.ax.plot(*crossroads.xy,
                                          f"{intersection_p_color}o")
+        for road in updated:
+            for crossroads in updated[road]:
+                self.split_road_in_two_halves(road, crossroads)
 
     def add_calculation_point(self, point: Point):
         """Adds a point that distance is measured from, or to. After adding two points, the next point will remove the previous two.
@@ -216,13 +298,8 @@ class Hmmm:
                 elif len(self.calculation_points) == 1:
                     self.calculation_points[1] = (
                         point, road.project(point), road)
-                    if road != self.calculation_points[0][2]:
-                        print(
-                            "Points are on two different linestrings, distance not supported yet!")
-                        different_linestrings = True
-                    if not different_linestrings:
-                        print(
-                            f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
+                    print(
+                        f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
                     print(
                         f"Connected: {self.connected(self.calculation_points[0][0], self.calculation_points[1][0])}")
                     print(
