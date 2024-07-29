@@ -1,4 +1,3 @@
-import heapq
 import matplotlib.pyplot as plt
 import mplcursors
 from matplotlib.backend_bases import MouseButton, KeyEvent
@@ -6,7 +5,8 @@ from shapely import equals, intersection, line_merge, snap
 from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points
-
+from constants import hb_size, normal_p_color, selected_p_color, intersection_p_color, calculation_p_color
+from algorithms import DFS, Dijkstra
 """
 # Create a line representing a road
 road = LineString([(0, 0), (1, 2), (2, 3), (4, 4)])
@@ -30,12 +30,6 @@ print(f"Distance between points A and B: {distance}")
 
 print_click_info = False  # use to print information on each mouse click
 
-hb_size = 0.3
-normal_p_color = "b"
-selected_p_color = "r"
-intersection_p_color = "g"
-calculation_p_color = "c"
-
 
 def create_hitbox(point: Point) -> Polygon:
     b = point.bounds
@@ -53,64 +47,7 @@ class Counter:
         return val
 
 
-class DFS:
-    def __init__(self, nodes):
-        self.nodes = nodes
-        self.graph = {node: [] for node in nodes}
-
-    def add_edge(self, a, b):
-        self.graph[a].append(b)
-        self.graph[b].append(a)
-
-    def visit(self, node):
-        if node in self.visited:
-            return
-        self.visited.add(node)
-
-        for next_node in self.graph[node]:
-            self.visit(next_node)
-
-    def search(self, start_node):
-        self.visited = set()
-        self.visit(start_node)
-        return self.visited
-
-
-class Dijkstra:
-    def __init__(self, nodes):
-        self.nodes = nodes
-        self.graph = {node: [] for node in nodes}
-
-    def add_edge(self, node_a, node_b, weight):
-        self.graph[node_a].append((node_b, weight))
-
-    def find_distances(self, start_node):
-        distances = {}
-        for node in self.nodes:
-            distances[node] = float("inf")
-        distances[start_node] = 0
-
-        queue = []
-        heapq.heappush(queue, (0, start_node))
-
-        visited = set()
-        while queue:
-            node_a = heapq.heappop(queue)[1]
-            if node_a in visited:
-                continue
-            visited.add(node_a)
-
-            for node_b, weight in self.graph[node_a]:
-                new_distance = distances[node_a] + weight
-                if new_distance < distances[node_b]:
-                    distances[node_b] = new_distance
-                    new_pair = (new_distance, node_b)
-                    heapq.heappush(queue, new_pair)
-
-        return distances
-
-
-class Hmmm:
+class Network:
 
     def __init__(self) -> None:
         self.fig, self.ax = plt.subplots()
@@ -121,6 +58,7 @@ class Hmmm:
         self.roads = []  # LineStrings
         self.current_road_points = []  # Points
         self.current_road_connects_to = None
+        self.current_road_first_point_existing = False
         self.plotted_points = {}  # (Point: plotted point) pairs
         self.plotted_lines = {}  # (LineString: plotted Line2D) pairs
         self.crossroads = []  # Points
@@ -191,14 +129,29 @@ class Hmmm:
         # return True
         # return False
 
-    def shared_coords(self, road1: LineString, road2: LineString):
-        """Returns True if road1 and road2 share any coordinates, or False otherwise.
-        Coordinates are the turning points of the road, not every coordinate that is covered by the LineString."""
-        for coord1 in road1.coords:
-            for coord2 in road2.coords:
-                if coord1 == coord2:
-                    return True
-        return False
+    def shared_coords(self, object1: LineString, object2: LineString):
+        """Returns True if object1 and object2 share any coordinates, or False otherwise. Objects can be Points or LineStrings.
+        For roads, the coordinates are the turning points of the road, not every coordinate that is covered by the LineString."""
+        if isinstance(object1, Point):
+            if isinstance(object2, Point):
+                return object1.x == object2.x and object1.y == object2.y
+            elif isinstance(object2, LineString):
+                for coord in object2.coords:
+                    if object1.x == coord[0] and object1.y == coord[1]:
+                        return True
+                return False
+        elif isinstance(object1, LineString):
+            if isinstance(object2, Point):
+                for coord in object1.coords:
+                    if object2.x == coord[0] and object2.y == coord[1]:
+                        return True
+                return False
+            elif isinstance(object2, LineString):
+                for coord1 in object1.coords:
+                    for coord2 in object2.coords:
+                        if coord1 == coord2:
+                            return True
+                return False
 
     def connected(self, point1: Point, point2: Point):
         dfs = DFS(self.roads)
@@ -224,10 +177,6 @@ class Hmmm:
         return False
 
     def split_road_in_two_halves(self, road, split_point):
-        print(self.crossroads)
-        print(road.coords[0])
-        print(split_point.coords[0])
-        print(road.coords[1])
         new_road_1 = LineString([road.coords[0], split_point.coords[0]])
         new_road_2 = LineString([split_point.coords[0], road.coords[1]])
 
@@ -252,12 +201,18 @@ class Hmmm:
 
     def create_crossroads(self):
         """Checks points where two roads intersect and adds crossroads there. Crossroad splits the existing roads."""
+
         updated = {}  # road: crossroads pairs, can't update them inside for loops because new roads get added, which extends the loops
         for road in self.roads:
             updated[road] = []
             for other_road in self.roads:
                 if road != other_road and bool(intersection(road, other_road)):
                     crossroads = intersection(road, other_road)
+                    for point in self.points:
+                        if self.shared_coords(point, crossroads):
+                            print("nope")
+                            print(self.crossroads)
+                            return
                     if type(crossroads) is MultiPoint:
                         for point in crossroads.geoms:
                             # prevents duplicate crossroads
@@ -321,7 +276,7 @@ class Hmmm:
     def add_point_to_road(self, point: Point):
         """Adds a point to the road that is currently building."""
         self.reset_plotted_point_colors()
-        overlapping_point = self.check_point_overlap(point)
+        overlapping_point: Point = self.check_point_overlap(point)
 
         if not overlapping_point:
             # create new point normally
@@ -330,56 +285,34 @@ class Hmmm:
             plotted_point = self.ax.plot(*point.xy, f"{normal_p_color}o")[0]
             self.plotted_points[point] = plotted_point
             self.ax.plot(*create_hitbox(point).exterior.xy)
-            if len(self.current_road_points) == 2:
-                self.add_road()
+
         else:
-            if len(self.current_road_points) > 0:
-                # only the starting point of the new road can be an existing point
-                return
-            # sets an existing point as the starting point of a new road
+            # sets an existing point as a point of a new road
             self.plotted_points[overlapping_point].set_color(
                 selected_p_color)
             self.current_road_points.append(overlapping_point)
-            for road in self.roads:
-                for coord in road.coords:
-                    if overlapping_point.coords[0] == coord:
-                        if coord != road.coords[-1] and coord != road.coords[0]:
-                            print(
-                                "You can only start a new road from the first or last point on the existing road!")
-                            print("Creating new road here.")
-                        else:
-                            # used later to merge these two roads
-                            self.current_road_connects_to = road
-                            print(
-                                "Continuing existing road, will be merged when finished")
 
-    def add_road(self):
-        """Creates new road."""
-        new_road = LineString([(point.x, point.y)
-                               for point in self.current_road_points])
-        """
-        if self.current_road_connects_to:
-            # join the new and existing roads together, then delete the existing road from roads and the plot too
-            new_road = MultiLineString(
-                [new_road, self.current_road_connects_to])
-            new_road = line_merge(new_road)
-            self.plotted_lines[self.current_road_connects_to].remove()
-            self.roads.remove(self.current_road_connects_to)
-            self.current_road_connects_to = None
-        """
+        if len(self.current_road_points) == 2:
+            self.add_road(self.current_road_points)
+            self.current_road_points.clear()
+
+    def add_road(self, points: list):
+        """Creates new road from points given, and plots it. The list <points> must consist of shapely.Point objects."""
+        coords = []
+        point: Point
+        for point in points:
+            coords.append((point.x, point.y))
+        new_road = LineString(coords)
         self.roads.append(new_road)
+
         x, y = new_road.xy
         plotted_line = self.ax.plot(
             x, y, label=f"Road {self.counter()}, length {new_road.length}")[0]
         self.plotted_lines[new_road] = plotted_line
-        self.current_road_points.clear()
+
         self.create_crossroads()
         self.create_cursor()
         print(f"Amount of roads: {len(self.roads)}")
-
-    def finish_road(self):
-        """Cancel road building mode."""
-        pass
 
     def onclick(self, event):
         if print_click_info:
@@ -387,7 +320,7 @@ class Hmmm:
                   ('double' if event.dblclick else 'single', event.button,
                    event.x, event.y, event.xdata, event.ydata))
         if event.button == MouseButton.RIGHT:
-            self.finish_road()
+            return
         elif event.button == MouseButton.LEFT:
             point = Point(event.xdata, event.ydata)
             self.add_point_to_road(point)
@@ -414,5 +347,5 @@ class Hmmm:
 
 
 if __name__ == "__main__":
-    h = Hmmm()
-    h.main()
+    n = Network()
+    n.main()
