@@ -3,11 +3,11 @@
 import heapq
 
 
-
 class DFS:
     def __init__(self, nodes):
         self.nodes = nodes
         self.graph = {node: [] for node in nodes}
+        self.visited = None
 
     def add_edge(self, a, b):
         self.graph[a].append(b)

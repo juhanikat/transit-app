@@ -1,39 +1,22 @@
 import matplotlib.pyplot as plt
 import mplcursors
-from matplotlib.backend_bases import MouseButton, KeyEvent
-from shapely import equals, intersection, line_merge, snap
-from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
+from matplotlib.backend_bases import MouseButton
+from shapely import intersection, snap
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points
-from constants import hb_size, normal_p_color, selected_p_color, intersection_p_color, calculation_p_color
+from constants import HITBOX_SIZE, NORMAL_P_COLOR, SELECTED_P_COLOR, INTERSECTION_P_COLOR, CALCULATION_P_COLOR
 from algorithms import DFS, Dijkstra
-"""
-# Create a line representing a road
-road = LineString([(0, 0), (1, 2), (2, 3), (4, 4)])
 
-# Plot the road
-x, y = road.xy
-plt.plot(x, y, label='Road')
 
-# Define points on the road
-point_a = Point(1, 2)
-point_b = Point(2, 3)
-
-# Plot the points
-plt.plot(*point_a.xy, 'go', label='Point A')
-plt.plot(*point_b.xy, 'ro', label='Point B')
-
-# Calculate the distance between the points on the road
-distance = point_a.distance(point_b)
-print(f"Distance between points A and B: {distance}")
-"""
-
-print_click_info = False  # use to print information on each mouse click
+PRINT_CLICK_INFO = False  # use to print information on each mouse click
+NO_CURSOR = False  # No yellow boxes
 
 
 def create_hitbox(point: Point) -> Polygon:
     b = point.bounds
-    new_b = (b[0] - hb_size, b[1] - hb_size, b[2] + hb_size, b[3] + hb_size)
+    new_b = (b[0] - HITBOX_SIZE, b[1] - HITBOX_SIZE,
+             b[2] + HITBOX_SIZE, b[3] + HITBOX_SIZE)
     return box(*new_b)
 
 
@@ -71,7 +54,10 @@ class Network:
     def create_cursor(self):
         """Needs to be recreated every time new data is added?"""
         def joku(sel):
-            sel.annotation.set_text(sel.artist)
+            if NO_CURSOR:
+                sel.annotation.set_text("")
+            else:
+                sel.annotation.set_text(sel.artist)
 
         cursor = mplcursors.cursor(hover=True)
         cursor.connect(
@@ -79,7 +65,7 @@ class Network:
 
     def reset_plotted_point_colors(self):
         for plotted_point in self.plotted_points.values():
-            plotted_point.set_color(normal_p_color)
+            plotted_point.set_color(NORMAL_P_COLOR)
 
     def remove_road(self, road):
         "Removes road and the plotted line which corresponds to road."
@@ -90,8 +76,9 @@ class Network:
         del self.plotted_lines[road]
 
     def crossroad_already_exists(self, crossroad: Point):
+        """Returns True if added crossroad is very near an existing one, or False otherwise."""
         for existing_crossroad in self.crossroads:
-            if equals(crossroad, existing_crossroad):
+            if crossroad.dwithin(existing_crossroad, 1e-8):
                 return True
         return False
 
@@ -176,66 +163,79 @@ class Network:
                 return True
         return False
 
-    def split_road_in_two_halves(self, road, split_point):
-        new_road_1 = LineString([road.coords[0], split_point.coords[0]])
-        new_road_2 = LineString([split_point.coords[0], road.coords[1]])
+    def split_road(self, road: LineString, split_points: list):
+        new_roads = []
+        if len(split_points) == 0:
+            print("Empty split points list!")
+            return
+        if len(split_points) == 1:
+            new_road_1 = LineString(
+                [road.coords[0], split_points[0].coords[0]])
+            new_road_2 = LineString(
+                [split_points[0].coords[0], road.coords[1]])
+            new_roads.append(new_road_1)
+            new_roads.append(new_road_2)
+        else:
+            first_road = LineString(
+                [road.coords[0], split_points[0].coords[0]])
+            new_roads.append(first_road)
 
+            for i in range(1, len(split_points)):
+                new_road = LineString(
+                    [split_points[i - 1].coords[0], split_points[i].coords[0]])
+                new_roads.append(new_road)
+
+            last_road = LineString(
+                [split_points[-1].coords[0], road.coords[1]])
+            new_roads.append(last_road)
+
+        for new_road in new_roads:
+            self.add_road(new_road)
         self.remove_road(road)
-        self.roads.append(new_road_1)
-        self.roads.append(new_road_2)
-
-        x, y = new_road_1.xy
-        plotted_line = self.ax.plot(
-            x, y, label=f"Road {self.counter()}, length {new_road_1.length}")[0]
-        self.plotted_lines[new_road_1] = plotted_line
-
-        x, y = new_road_2.xy
-        plotted_line = self.ax.plot(
-            x, y, label=f"Road {self.counter()}, length {new_road_2.length}")[0]
-        self.plotted_lines[new_road_2] = plotted_line
 
         self.current_road_points.clear()
-        self.create_crossroads()
-        self.create_cursor()
-        print(f"Amount of roads: {len(self.roads)}")
 
     def create_crossroads(self):
         """Checks points where two roads intersect and adds crossroads there. Crossroad splits the existing roads."""
 
-        updated = {}  # road: crossroads pairs, can't update them inside for loops because new roads get added, which extends the loops
         for road in self.roads:
-            updated[road] = []
             for other_road in self.roads:
                 if road != other_road and bool(intersection(road, other_road)):
                     crossroads = intersection(road, other_road)
+                    # if crossroad is at the same point as a road ending point, nothing is done
                     for point in self.points:
                         if self.shared_coords(point, crossroads):
-                            print("nope")
-                            print(self.crossroads)
-                            return
-                    if type(crossroads) is MultiPoint:
+                            continue
+
+                    if isinstance(crossroads, MultiPoint):
                         for point in crossroads.geoms:
                             # prevents duplicate crossroads
                             if not self.crossroad_already_exists(point):
                                 self.crossroads.append(point)
-                                updated[road].append(crossroads)
                                 self.ax.plot(
-                                    *point.xy, f"{intersection_p_color}o")
+                                    *point.xy, f"{INTERSECTION_P_COLOR}o")
                     else:
                         # prevents duplicate crossroads
                         if not self.crossroad_already_exists(crossroads):
                             self.crossroads.append(crossroads)
-                            updated[road].append(crossroads)
                             self.ax.plot(*crossroads.xy,
-                                         f"{intersection_p_color}o")
+                                         f"{INTERSECTION_P_COLOR}o")
+
+        updated = {}  # road: crossroads pairs
+        for road in self.roads:
+            updated[road] = []
+        for road in self.roads:
+            for crossroad in self.crossroads:
+                if road.dwithin(crossroad, 1e-8) and not self.shared_coords(road, crossroad):
+                    updated[road].append(crossroad)
         for road in updated:
-            for crossroads in updated[road]:
-                self.split_road_in_two_halves(road, crossroads)
+            if road not in self.roads:
+                continue
+            self.split_road(road, updated[road])
 
     def add_calculation_point(self, point: Point):
         """Adds a point that distance is measured from, or to. After adding two points, the next point will remove the previous two.
         Points currently have to be on the same linestring."""
-        different_linestrings = False
         if len(self.calculation_points) == 2:
             self.calculation_points.clear()
             for plotted_point in self.plotted_calculation_points:
@@ -260,7 +260,7 @@ class Network:
                     print(
                         f"Pathfinding: {self.find_shortest_path(self.calculation_points[0][0], self.calculation_points[1][0])}")
                 plotted_point = self.ax.plot(
-                    *point.xy, f"{calculation_p_color}o")[0]
+                    *point.xy, f"{CALCULATION_P_COLOR}o")[0]
                 self.plotted_calculation_points.append(plotted_point)
                 return True
         return False
@@ -282,40 +282,43 @@ class Network:
             # create new point normally
             self.points.append(point)
             self.current_road_points.append(point)
-            plotted_point = self.ax.plot(*point.xy, f"{normal_p_color}o")[0]
+            plotted_point = self.ax.plot(*point.xy, f"{NORMAL_P_COLOR}o")[0]
             self.plotted_points[point] = plotted_point
             self.ax.plot(*create_hitbox(point).exterior.xy)
 
         else:
             # sets an existing point as a point of a new road
             self.plotted_points[overlapping_point].set_color(
-                selected_p_color)
+                SELECTED_P_COLOR)
             self.current_road_points.append(overlapping_point)
 
         if len(self.current_road_points) == 2:
             self.add_road(self.current_road_points)
             self.current_road_points.clear()
+            self.create_crossroads()
 
-    def add_road(self, points: list):
-        """Creates new road from points given, and plots it. The list <points> must consist of shapely.Point objects."""
+    def add_road(self, added: list | LineString):
+        """Creates new road from points given, and plots it. <added> can be a list of shapely.Point objects or a LineString."""
         coords = []
-        point: Point
-        for point in points:
-            coords.append((point.x, point.y))
-        new_road = LineString(coords)
-        self.roads.append(new_road)
+        if isinstance(added, list):
+            point: Point
+            for point in added:
+                coords.append((point.x, point.y))
+            new_road = LineString(coords)
+        else:
+            new_road = added
 
+        self.roads.append(new_road)
         x, y = new_road.xy
         plotted_line = self.ax.plot(
             x, y, label=f"Road {self.counter()}, length {new_road.length}")[0]
         self.plotted_lines[new_road] = plotted_line
 
-        self.create_crossroads()
         self.create_cursor()
         print(f"Amount of roads: {len(self.roads)}")
 
     def onclick(self, event):
-        if print_click_info:
+        if PRINT_CLICK_INFO:
             print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
                   ('double' if event.dblclick else 'single', event.button,
                    event.x, event.y, event.xdata, event.ydata))
