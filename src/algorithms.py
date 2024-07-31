@@ -28,18 +28,27 @@ class DFS:
 
 
 class Dijkstra:
-    def __init__(self, nodes):
-        self.nodes = nodes
-        self.graph = {node: [] for node in nodes}
+    """Does not take nodes when initialized, they have to be added with add_node()!"""
+
+    def __init__(self) -> None:
+        self.graph = {}
+        self.distances = {}
+
+    def add_node(self, node):
+        if node not in self.graph.keys():
+            self.graph[node] = []
 
     def add_edge(self, node_a, node_b, weight):
         self.graph[node_a].append((node_b, weight))
 
-    def find_distances(self, start_node):
-        distances = {}
-        for node in self.nodes:
-            distances[node] = float("inf")
-        distances[start_node] = 0
+    def find_distances(self, start_node, end_node):
+        """Returns shortest path between start_node and end_node, and the distance from start_node to end_node."""
+        self.distances = {}
+        for node in self.graph.keys():
+            self.distances[node] = float("inf")
+        self.distances[start_node] = 0
+        previous = {}
+        previous[start_node] = None
 
         queue = []
         heapq.heappush(queue, (0, start_node))
@@ -52,10 +61,21 @@ class Dijkstra:
             visited.add(node_a)
 
             for node_b, weight in self.graph[node_a]:
-                new_distance = distances[node_a] + weight
-                if new_distance < distances[node_b]:
-                    distances[node_b] = new_distance
+                new_distance = self.distances[node_a] + weight
+                if new_distance < self.distances[node_b]:
+                    self.distances[node_b] = new_distance
+                    previous[node_b] = node_a
                     new_pair = (new_distance, node_b)
                     heapq.heappush(queue, new_pair)
 
-        return distances
+        if self.distances[end_node] == float("inf"):
+            return None
+
+        path = []
+        node = end_node
+        while node:
+            path.append(node)
+            node = previous[node]
+
+        path.reverse()
+        return (path, self.distances[end_node])

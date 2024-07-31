@@ -2,15 +2,15 @@ import matplotlib.pyplot as plt
 import mplcursors
 from matplotlib.backend_bases import MouseButton
 from shapely import intersection, snap
-from shapely.geometry import LineString, Point, Polygon, box
+from shapely.geometry import LineString, Point, Polygon, box, MultiLineString
 from shapely.geometry.multipoint import MultiPoint
-from shapely.ops import nearest_points
+from shapely.ops import nearest_points, split
 from constants import HITBOX_SIZE, NORMAL_P_COLOR, SELECTED_P_COLOR, INTERSECTION_P_COLOR, CALCULATION_P_COLOR
 from algorithms import DFS, Dijkstra
 
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
-NO_CURSOR = False  # No yellow boxes
+NO_CURSOR = True  # No yellow boxes
 
 
 def create_hitbox(point: Point) -> Polygon:
@@ -83,38 +83,76 @@ class Network:
         return False
 
     def find_shortest_path(self, point1: Point, point2: Point):
-        """Finds the shortest path between point1 and point2 along a road. Uses Dijkstra's algorithm. Returns the roads that make up the path."""
-        d = Dijkstra(self.roads)
+        """Finds the shortest path between point1 and point2 along a road. Uses Dijkstra's algorithm. Returns the roads that make up the path, and the distance from start to end."""
+        d = Dijkstra()
+        d.add_node(point1)
+        d.add_node(point2)
         start_road = None
         end_road = None
+        start_road_parts = None
+        end_road_parts = None
         # create edges for graph
         road: LineString
-        for road in self.roads:
-            print("juu")
+        for road in self.roads.copy():
             if point1.dwithin(road, 1e-8):
-                nearest_on_road = nearest_points(point1, road)[1]
-                point1 = nearest_on_road
+                # road gets removed becuase it is moved very slightly
+                self.remove_road(road)
+                road = snap(road, point1, tolerance=0.0001)
+                self.add_road(LineString([road.coords[0], road.coords[2]]))
+
                 start_road = road
+                start_road_parts = split(start_road, point1).geoms
+                d.add_node(start_road_parts[0])
+                d.add_node(start_road_parts[1])
+                d.add_edge(
+                    point1, start_road_parts[0], start_road_parts[0].length)
+                d.add_edge(start_road_parts[0], point1, 0)
+                d.add_edge(
+                    point1, start_road_parts[1], start_road_parts[1].length)
+                d.add_edge(start_road_parts[1], point1, 0)
             if point2.dwithin(road, 1e-8):
-                nearest_on_road = nearest_points(point2, road)[1]
-                point2 = nearest_on_road
+                # road gets removed becuase it is moved very slightly
+                self.remove_road(road)
+                road = snap(road, point2, tolerance=0.0001)
+                print(f"ROADDDDD: {road}")
+                self.add_road(LineString([road.coords[0], road.coords[2]]))
+
                 end_road = road
-            other_road: LineString
-            for other_road in self.roads:
-                if not (road is other_road) and (road.crosses(other_road) or self.shared_coords(road, other_road)):
-                    print("joo")
-                    d.add_edge(road, other_road,
-                               other_road.length)
+                end_road_parts = split(end_road, point2).geoms
+                d.add_node(end_road_parts[0])
+                d.add_node(end_road_parts[1])
+                d.add_edge(point2, end_road_parts[0], end_road_parts[0].length)
+                d.add_edge(end_road_parts[0], point2, 0)
+                d.add_edge(point2, end_road_parts[1], end_road_parts[1].length)
+                d.add_edge(end_road_parts[1], point2, 0)
 
         if not start_road:
             print("point 1 is not on any road!")
             return
+        if not end_road:
+            print("point 2 is not on any road!")
+            return
 
-        distances = d.find_distances(start_road)
-        print(f"Distances: {distances}")
-        print(f"Distance to end: {distances[end_road] + start_road.length}")
-        # return True
-        # return False
+        road: LineString
+        for road in self.roads + list(start_road_parts) + list(end_road_parts):
+            if road is not start_road and road is not end_road:
+                d.add_node(road)
+            else:
+                continue
+
+        for road in self.roads + list(start_road_parts) + list(end_road_parts):
+            other_road: LineString
+            for other_road in self.roads + list(start_road_parts) + list(end_road_parts):
+                if road is not start_road and road is not end_road and other_road is not start_road and other_road is not end_road:
+                    if not (road is other_road) and (road.crosses(other_road) or self.shared_coords(road, other_road)):
+                        d.add_edge(road, other_road,
+                                   other_road.length)
+
+        roads, end_distance = d.find_distances(point1, point2)
+        print(len(self.roads))
+        print("SELF ROADS")
+        print(self.roads)
+        return (roads, end_distance)
 
     def shared_coords(self, object1: LineString, object2: LineString):
         """Returns True if object1 and object2 share any coordinates, or False otherwise. Objects can be Points or LineStrings.
@@ -253,12 +291,19 @@ class Network:
                 elif len(self.calculation_points) == 1:
                     self.calculation_points[1] = (
                         point, road.project(point), road)
+                    """
                     print(
                         f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
                     print(
                         f"Connected: {self.connected(self.calculation_points[0][0], self.calculation_points[1][0])}")
+                    """
+                    shortest_path = self.find_shortest_path(
+                        self.calculation_points[0][0], self.calculation_points[1][0])
                     print(
-                        f"Pathfinding: {self.find_shortest_path(self.calculation_points[0][0], self.calculation_points[1][0])}")
+                        f"Distance from point 1 to point 2: {shortest_path[1]}")
+                    print(
+                        f"Roads used: {shortest_path[0]}")
+
                 plotted_point = self.ax.plot(
                     *point.xy, f"{CALCULATION_P_COLOR}o")[0]
                 self.plotted_calculation_points.append(plotted_point)
