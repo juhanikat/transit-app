@@ -7,6 +7,7 @@ from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points, split
 from constants import HITBOX_SIZE, NORMAL_P_COLOR, SELECTED_P_COLOR, INTERSECTION_P_COLOR, CALCULATION_P_COLOR
 from algorithms import DFS, Dijkstra
+from ui import UI
 
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
@@ -33,21 +34,15 @@ class Counter:
 class Network:
 
     def __init__(self) -> None:
-        self.fig, self.ax = plt.subplots()
-        self.ax.set_xlim(0, 10)
-        self.ax.set_ylim(0, 10)
-
         self.points = []  # Points
         self.roads = []  # LineStrings
         self.current_road_points = []  # Points
         self.current_road_connects_to = None
         self.current_road_first_point_existing = False
-        self.plotted_points = {}  # (Point: plotted point) pairs
-        self.plotted_lines = {}  # (LineString: plotted Line2D) pairs
         self.crossroads = []  # Points
+
         # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
         self.calculation_points = {}
-        self.plotted_calculation_points = []
 
         self.counter = Counter()
 
@@ -63,17 +58,9 @@ class Network:
         cursor.connect(
             "add", lambda sel: joku(sel))
 
-    def reset_plotted_point_colors(self):
-        for plotted_point in self.plotted_points.values():
-            plotted_point.set_color(NORMAL_P_COLOR)
-
     def remove_road(self, road):
-        "Removes road and the plotted line which corresponds to road."
+        "Removes road."
         self.roads.remove(road)
-        if road not in self.plotted_lines.keys():
-            print("ROAD DOES NOT EXIST IN PLOTTED LINES DICTIONARY, CANNOT DELETE!")
-        self.plotted_lines[road].remove()
-        del self.plotted_lines[road]
 
     def crossroad_already_exists(self, crossroad: Point):
         """Returns True if added crossroad is very near an existing one, or False otherwise."""
@@ -202,6 +189,10 @@ class Network:
         return False
 
     def split_road(self, road: LineString, split_points: list):
+        """Splits road in segments based in the points in <split_points>. These points must be on the road."""
+        # IMPORTANT this could be remade using split(),
+        # but then because floating point problems, the road would need to be snapped to each point in <split_points>,
+        # which might be difficult if there's more than 1 point.
         new_roads = []
         if len(split_points) == 0:
             print("Empty split points list!")
@@ -234,30 +225,35 @@ class Network:
         self.current_road_points.clear()
 
     def create_crossroads(self):
-        """Checks points where two roads intersect and adds crossroads there. Crossroad splits the existing roads."""
-
+        """Checks points where two roads intersect and adds crossroads there. Crossroad splits the existing roads. Returns list of new crossroads."""
+        new_crossroads = []
         for road in self.roads:
             for other_road in self.roads:
+                invalid_crossroad = False
                 if road != other_road and bool(intersection(road, other_road)):
                     crossroads = intersection(road, other_road)
                     # if crossroad is at the same point as a road ending point, nothing is done
                     for point in self.points:
                         if self.shared_coords(point, crossroads):
-                            continue
+                            invalid_crossroad = True
+                            break
+                    if invalid_crossroad:
+                        continue
 
                     if isinstance(crossroads, MultiPoint):
                         for point in crossroads.geoms:
                             # prevents duplicate crossroads
                             if not self.crossroad_already_exists(point):
-                                self.crossroads.append(point)
-                                self.ax.plot(
-                                    *point.xy, f"{INTERSECTION_P_COLOR}o")
+                                new_crossroads.append(point)
                     else:
                         # prevents duplicate crossroads
                         if not self.crossroad_already_exists(crossroads):
-                            self.crossroads.append(crossroads)
-                            self.ax.plot(*crossroads.xy,
-                                         f"{INTERSECTION_P_COLOR}o")
+                            new_crossroads.append(point)
+
+        for crossroad in new_crossroads:
+            self.crossroads.append(crossroad)
+        print(self.points)
+        return new_crossroads
 
         updated = {}  # road: crossroads pairs
         for road in self.roads:
@@ -274,11 +270,14 @@ class Network:
     def add_calculation_point(self, point: Point):
         """Adds a point that distance is measured from, or to. After adding two points, the next point will remove the previous two.
         Points currently have to be on the same linestring."""
+        clear_plotted_calculation_points = False
+        calculation_point = None
+
         if len(self.calculation_points) == 2:
             self.calculation_points.clear()
-            for plotted_point in self.plotted_calculation_points:
-                plotted_point.remove()
-            self.plotted_calculation_points.clear()
+            clear_plotted_calculation_points = True
+
+        road: LineString
         for road in self.roads:
             nearest_on_road = nearest_points(point, road)[1]
             snapped_point = snap(point, nearest_on_road, tolerance=0.7)
@@ -286,11 +285,14 @@ class Network:
             if snapped_point != point:
                 point = snapped_point
                 if len(self.calculation_points) == 0:
-                    self.calculation_points[0] = (
+                    calculation_point = (
                         point, road.project(point), road)
+                    self.calculation_points[0] = calculation_point
                 elif len(self.calculation_points) == 1:
-                    self.calculation_points[1] = (
+                    calculation_point = (
                         point, road.project(point), road)
+                    self.calculation_points[1] = calculation_point
+
                     """
                     print(
                         f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
@@ -304,11 +306,7 @@ class Network:
                     print(
                         f"Roads used: {shortest_path[0]}")
 
-                plotted_point = self.ax.plot(
-                    *point.xy, f"{CALCULATION_P_COLOR}o")[0]
-                self.plotted_calculation_points.append(plotted_point)
-                return True
-        return False
+        return (calculation_point, clear_plotted_calculation_points)
 
     def check_point_overlap(self, point: Point):
         """Checks if <point> overlaps with an existing points hitbox, and returns the existing point if so."""
@@ -318,32 +316,39 @@ class Network:
                 return other_point
         return False
 
-    def add_point_to_road(self, point: Point):
-        """Adds a point to the road that is currently building."""
-        self.reset_plotted_point_colors()
+    def add_point_to_road(self, point: Point) -> tuple:
+        """_summary_
+
+        Args:
+            point (Point): _description_
+
+        Returns:
+            tuple: A tuple containing the added point, boolean that tells if added point was an existing one, the added road if one was built and any crossroads that were made.
+        """
+        point_overlaps = False
+        new_road = None
+        crossroads = []
         overlapping_point: Point = self.check_point_overlap(point)
 
         if not overlapping_point:
             # create new point normally
             self.points.append(point)
             self.current_road_points.append(point)
-            plotted_point = self.ax.plot(*point.xy, f"{NORMAL_P_COLOR}o")[0]
-            self.plotted_points[point] = plotted_point
-            self.ax.plot(*create_hitbox(point).exterior.xy)
 
         else:
             # sets an existing point as a point of a new road
-            self.plotted_points[overlapping_point].set_color(
-                SELECTED_P_COLOR)
+            point_overlaps = True
             self.current_road_points.append(overlapping_point)
 
         if len(self.current_road_points) == 2:
-            self.add_road(self.current_road_points)
+            new_road = self.add_road(self.current_road_points)
             self.current_road_points.clear()
-            self.create_crossroads()
+            crossroads = self.create_crossroads()
+
+        return (point, point_overlaps, new_road, crossroads)
 
     def add_road(self, added: list | LineString):
-        """Creates new road from points given, and plots it. <added> can be a list of shapely.Point objects or a LineString."""
+        """Creates new road from points given, and plots it. <added> can be a list of shapely.Point objects or a LineString. Returns the road."""
         coords = []
         if isinstance(added, list):
             point: Point
@@ -354,13 +359,9 @@ class Network:
             new_road = added
 
         self.roads.append(new_road)
-        x, y = new_road.xy
-        plotted_line = self.ax.plot(
-            x, y, label=f"Road {self.counter()}, length {new_road.length}")[0]
-        self.plotted_lines[new_road] = plotted_line
-
         self.create_cursor()
         print(f"Amount of roads: {len(self.roads)}")
+        return new_road
 
     def onclick(self, event):
         if PRINT_CLICK_INFO:
@@ -378,22 +379,8 @@ class Network:
         else:
             print("Invalid input!")
 
-    def onkey(self, event):
-        return
-        if event.key == "c":
-            print(self.connected(self.points[0], self.points[1]))
-        else:
-            print("Invalid input!")
-
-    def main(self):
-        self.fig.canvas.mpl_connect('button_press_event', self.onclick)
-        self.fig.canvas.mpl_connect('key_press_event', self.onkey)
-
-        # Show the plot
-        plt.ion()
-        plt.show(block=True)
-
 
 if __name__ == "__main__":
     n = Network()
-    n.main()
+    ui = UI(n)
+    ui.start_ui()
