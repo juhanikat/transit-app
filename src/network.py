@@ -34,12 +34,11 @@ class Counter:
 class Network:
 
     def __init__(self) -> None:
-        self.points = []  # Points
+        self.points = []  # All points except calculation points
         self.roads = []  # LineStrings
         self.current_road_points = []  # Points
         self.current_road_connects_to = None
         self.current_road_first_point_existing = False
-        self.crossroads = []  # Points
         self.hitboxes = {}
 
         # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
@@ -63,13 +62,10 @@ class Network:
         "Removes road."
         self.roads.remove(road)
 
-    def invalid_crossroad_placement(self, crossroad: Point):
-        """Returns True if added crossroad is very near an existing one, or an existing point. False otherwise."""
-        for existing_crossroad in self.crossroads:
-            if crossroad.dwithin(existing_crossroad, 1e-8):
-                return True
-        for point in self.points:
-            if self.shared_coords(crossroad, point):
+    def invalid_point_placement(self, point: Point):
+        """Returns True if added point is very near an existing point, or False otherwise."""
+        for existing_point in self.points:
+            if point.dwithin(existing_point, 1e-8):
                 return True
         return False
 
@@ -135,9 +131,9 @@ class Network:
             print("point 2 is not on any road!")
             return
 
-        for point in self.points + self.crossroads:
+        for point in self.points:
             d.add_node(point.coords[0])
-            for other_point in self.points + self.crossroads:
+            for other_point in self.points:
                 d.add_node(other_point.coords[0])
                 if point is other_point:
                     continue
@@ -208,7 +204,7 @@ class Network:
         return False
 
     def split_road(self, road: LineString, split_points: list):
-        """Splits road in segments based in the points in <split_points>. These points must be on the road."""
+        """Splits road in segments based in the points in <split_points>. These points must be on the road. Deletes the old road and returns new roads."""
         # IMPORTANT this could be remade using split(),
         # but then because floating point problems, the road would need to be snapped to each point in <split_points>,
         # which might be difficult if there's more than 1 point.
@@ -237,11 +233,8 @@ class Network:
                 [split_points[-1].coords[0], road.coords[1]])
             new_roads.append(last_road)
 
-        for new_road in new_roads:
-            self.add_road(new_road)
         self.remove_road(road)
-
-        self.current_road_points.clear()
+        return new_roads
 
     def create_crossroads(self):
         """Checks points where two roads intersect and adds crossroads there. Crossroad splits the existing roads. Returns list of new crossroads."""
@@ -250,34 +243,47 @@ class Network:
             for other_road in self.roads:
                 if road != other_road and bool(intersection(road, other_road)):
                     crossroads = intersection(road, other_road)
-                    print(f"Crossroads: {crossroads}")
-
                     if isinstance(crossroads, MultiPoint):
-                        for point in crossroads.geoms:
-                            # prevents duplicate crossroads
-                            if not self.invalid_crossroad_placement(point):
-                                new_crossroads.append(point)
+                        crossroads = crossroads.geoms
                     else:
-                        # prevents duplicate crossroads
-                        if not self.invalid_crossroad_placement(crossroads):
-                            new_crossroads.append(crossroads)
-
-        for crossroad in new_crossroads:
-            self.crossroads.append(crossroad)
+                        crossroads = [crossroads]
+                    for crossroad in crossroads:
+                        new_crossroads.append(crossroad)
 
         updated = {}  # road: crossroads pairs
+        new_roads = []  # roads created later by split_road()
         for road in self.roads:
             updated[road] = []
         road: LineString
         for road in self.roads:
-            for crossroad in self.crossroads:
-                if road.dwithin(crossroad, 1e-8) and not self.shared_coords(road, crossroad):
-                    updated[road].append(crossroad)
+            for crossroad in new_crossroads:
+                snapped_crossroad = self.snap_point_to_road(crossroad, road)
+                if snapped_crossroad and not self.shared_coords(road, snapped_crossroad):
+                    if self.check_point_overlap(crossroad):
+                        # Road cannot be created if crossroad is near an existing point
+                        return False
+                    updated[road].append(snapped_crossroad)
+
         for road in updated:
-            if road not in self.roads:
+            if road not in self.roads or len(updated[road]) == 0:
                 continue
-            self.split_road(road, updated[road])
-            return new_crossroads
+            new_roads += self.split_road(road, updated[road])
+
+        for crossroad in new_crossroads:
+            self.points.append(crossroad)
+            self.hitboxes[crossroad] = create_hitbox(crossroad)
+        for road in new_roads:
+            self.add_road(road, check_crossroads=False)
+
+        return new_crossroads
+
+    def snap_point_to_road(self, point: Point, road: LineString):
+        """Snaps <point> to <road> if it is very near it, and returns the snapped point. Returns False otherwise."""
+        if road.dwithin(point, 1e-8):
+            nearest_on_road = nearest_points(point, road)[1]
+            snapped_point = snap(point, nearest_on_road, tolerance=0.0001)
+            return snapped_point
+        return False
 
     def add_calculation_point(self, point: Point):
         """Adds a point that distance is measured from, or to. After adding two points, the next point will remove the previous two.
@@ -338,31 +344,28 @@ class Network:
             tuple: A tuple containing the added point, boolean that tells if added point was an existing one, the added road if one was built and any crossroads that were made.
         """
         point_overlaps = False
-        new_road = None
-        crossroads = []
         overlapping_point: Point = self.check_point_overlap(point)
 
         if not overlapping_point:
             # create new point normally
             self.points.append(point)
             self.hitboxes[point] = create_hitbox(point)
-            self.current_road_points.append(point)
-
         else:
             # sets an existing point as a point of a new road
             point = overlapping_point
             point_overlaps = True
-            self.current_road_points.append(point)
 
+        self.current_road_points.append(point)
         if len(self.current_road_points) == 2:
-            new_road = self.add_road(self.current_road_points)
+            print(self.current_road_points)
+            self.add_road(self.current_road_points)
             self.current_road_points.clear()
-            crossroads = self.create_crossroads()
 
-        return (point, point_overlaps, new_road, crossroads)
+        return (point, point_overlaps)
 
-    def add_road(self, added: list | LineString):
-        """Creates new road from points given, and plots it. <added> can be a list of shapely.Point objects or a LineString. Returns the road."""
+    def add_road(self, added: list | LineString, check_crossroads=True):
+        """Checks that given road can be created, and creates it if so. <added> can be a list of shapely.Point objects or a LineString.
+        Returns the road, or False if it could not be created."""
         coords = []
         if isinstance(added, list):
             point: Point
@@ -373,6 +376,23 @@ class Network:
             new_road = added
 
         self.roads.append(new_road)
+        if check_crossroads:
+            crossroads = self.create_crossroads()
+            if crossroads is False:
+                print("Crossroads was False")
+                self.remove_road(new_road)
+                # deletes current road points if they weren't permanent
+                for point in self.current_road_points:
+                    to_be_removed = True
+                    for road in self.roads:
+                        if point.coords[0] == road.coords[0] or point.coords[0] == road.coords[1]:
+                            to_be_removed = False
+                            break
+                    if to_be_removed:
+                        self.points.remove(point)
+                        del self.hitboxes[point]
+                print(f"Can't create road {new_road}")
+                return False
         self.create_cursor()
         print(f"Amount of roads: {len(self.roads)}")
         return new_road
