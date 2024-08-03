@@ -39,7 +39,8 @@ class Dijkstra:
             self.graph[node] = []
 
     def add_edge(self, node_a, node_b, weight):
-        self.graph[node_a].append((node_b, weight))
+        if (node_b, weight) not in self.graph[node_a]:
+            self.graph[node_a].append((node_b, weight))
 
     def find_distances(self, start_node, end_node):
         """Returns shortest path between start_node and end_node, and the distance from start_node to end_node."""
@@ -66,6 +67,7 @@ class Dijkstra:
                     self.distances[node_b] = new_distance
                     previous[node_b] = node_a
                     new_pair = (new_distance, node_b)
+                    print(queue, new_pair)
                     heapq.heappush(queue, new_pair)
 
         if self.distances[end_node] == float("inf"):

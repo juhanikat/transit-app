@@ -11,7 +11,7 @@ from ui import UI
 
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
-NO_CURSOR = True  # No yellow boxes
+NO_CURSOR = False  # No yellow boxes
 
 
 def create_hitbox(point: Point) -> Polygon:
@@ -62,18 +62,19 @@ class Network:
         "Removes road."
         self.roads.remove(road)
 
-    def crossroad_already_exists(self, crossroad: Point):
-        """Returns True if added crossroad is very near an existing one, or False otherwise."""
+    def invalid_crossroad_placement(self, crossroad: Point):
+        """Returns True if added crossroad is very near an existing one, or an existing point. False otherwise."""
         for existing_crossroad in self.crossroads:
             if crossroad.dwithin(existing_crossroad, 1e-8):
+                return True
+        for point in self.points:
+            if self.shared_coords(crossroad, point):
                 return True
         return False
 
     def find_shortest_path(self, point1: Point, point2: Point):
         """Finds the shortest path between point1 and point2 along a road. Uses Dijkstra's algorithm. Returns the roads that make up the path, and the distance from start to end."""
         d = Dijkstra()
-        d.add_node(point1)
-        d.add_node(point2)
         start_road = None
         end_road = None
         start_road_parts = None
@@ -89,16 +90,22 @@ class Network:
 
                 start_road = road
                 start_road_parts = split(start_road, point1).geoms
-                d.add_node(start_road_parts[0])
-                d.add_node(start_road_parts[1])
+
+                d.add_node(start_road_parts[0].coords[0])
+                d.add_node(point1.coords[0])
+                d.add_node(start_road_parts[1].coords[1])
+
                 d.add_edge(
-                    point1, start_road_parts[0], start_road_parts[0].length)
-                d.add_edge(start_road_parts[0], point1, 0)
+                    start_road_parts[0].coords[0], point1.coords[0], start_road_parts[0].length)
                 d.add_edge(
-                    point1, start_road_parts[1], start_road_parts[1].length)
-                d.add_edge(start_road_parts[1], point1, 0)
+                    point1.coords[0], start_road_parts[0].coords[0], start_road_parts[0].length)
+                d.add_edge(
+                    point1.coords[0], start_road_parts[1].coords[1],  start_road_parts[1].length)
+                d.add_edge(
+                    start_road_parts[1].coords[1], point1.coords[0], start_road_parts[1].length)
+
             if point2.dwithin(road, 1e-8):
-                # road gets removed becuase it is moved very slightly
+                # road gets removed becuase it is moved very slightly DOESNT WORK WITH ONLY 1 ROAD FIX
                 self.remove_road(road)
                 road = snap(road, point2, tolerance=0.0001)
                 print(f"ROADDDDD: {road}")
@@ -106,12 +113,19 @@ class Network:
 
                 end_road = road
                 end_road_parts = split(end_road, point2).geoms
-                d.add_node(end_road_parts[0])
-                d.add_node(end_road_parts[1])
-                d.add_edge(point2, end_road_parts[0], end_road_parts[0].length)
-                d.add_edge(end_road_parts[0], point2, 0)
-                d.add_edge(point2, end_road_parts[1], end_road_parts[1].length)
-                d.add_edge(end_road_parts[1], point2, 0)
+
+                d.add_node(end_road_parts[0].coords[0])
+                d.add_node(point2.coords[0])
+                d.add_node(end_road_parts[1].coords[1])
+
+                d.add_edge(
+                    end_road_parts[0].coords[0], point2.coords[0], end_road_parts[0].length)
+                d.add_edge(
+                    point2.coords[0], end_road_parts[0].coords[0], end_road_parts[0].length)
+                d.add_edge(
+                    end_road_parts[1].coords[1], point2.coords[0], end_road_parts[1].length)
+                d.add_edge(
+                    point2.coords[0], end_road_parts[1].coords[1], end_road_parts[1].length)
 
         if not start_road:
             print("point 1 is not on any road!")
@@ -120,22 +134,26 @@ class Network:
             print("point 2 is not on any road!")
             return
 
-        road: LineString
-        for road in self.roads + list(start_road_parts) + list(end_road_parts):
-            if road is not start_road and road is not end_road:
-                d.add_node(road)
-            else:
-                continue
+        for point in self.points + self.crossroads:
+            d.add_node(point.coords[0])
+            for other_point in self.points + self.crossroads:
+                d.add_node(other_point.coords[0])
+                if point is other_point:
+                    continue
+                road: LineString
+                for road in self.roads + list(start_road_parts) + list(end_road_parts):
+                    # checks if road connects point and other point
+                    if (road.coords[0] == point.coords[0]
+                        or road.coords[1] == point.coords[0]) and (road.coords[0] == other_point.coords[0]
+                                                                   or road.coords[1] == other_point.coords[0]):
+                        d.add_edge(
+                            point.coords[0], other_point.coords[0], road.length)
+                        d.add_edge(
+                            other_point.coords[0], point.coords[0], road.length)
 
-        for road in self.roads + list(start_road_parts) + list(end_road_parts):
-            other_road: LineString
-            for other_road in self.roads + list(start_road_parts) + list(end_road_parts):
-                if road is not start_road and road is not end_road and other_road is not start_road and other_road is not end_road:
-                    if not (road is other_road) and (road.crosses(other_road) or self.shared_coords(road, other_road)):
-                        d.add_edge(road, other_road,
-                                   other_road.length)
-
-        roads, end_distance = d.find_distances(point1, point2)
+        print(d.graph)
+        roads, end_distance = d.find_distances(
+            point1.coords[0], point2.coords[0])
         print(len(self.roads))
         print("SELF ROADS")
         print(self.roads)
@@ -229,35 +247,27 @@ class Network:
         new_crossroads = []
         for road in self.roads:
             for other_road in self.roads:
-                invalid_crossroad = False
                 if road != other_road and bool(intersection(road, other_road)):
                     crossroads = intersection(road, other_road)
-                    # if crossroad is at the same point as a road ending point, nothing is done
-                    for point in self.points:
-                        if self.shared_coords(point, crossroads):
-                            invalid_crossroad = True
-                            break
-                    if invalid_crossroad:
-                        continue
+                    print(f"Crossroads: {crossroads}")
 
                     if isinstance(crossroads, MultiPoint):
                         for point in crossroads.geoms:
                             # prevents duplicate crossroads
-                            if not self.crossroad_already_exists(point):
+                            if not self.invalid_crossroad_placement(point):
                                 new_crossroads.append(point)
                     else:
                         # prevents duplicate crossroads
-                        if not self.crossroad_already_exists(crossroads):
-                            new_crossroads.append(point)
+                        if not self.invalid_crossroad_placement(crossroads):
+                            new_crossroads.append(crossroads)
 
         for crossroad in new_crossroads:
             self.crossroads.append(crossroad)
-        print(self.points)
-        return new_crossroads
 
         updated = {}  # road: crossroads pairs
         for road in self.roads:
             updated[road] = []
+        road: LineString
         for road in self.roads:
             for crossroad in self.crossroads:
                 if road.dwithin(crossroad, 1e-8) and not self.shared_coords(road, crossroad):
@@ -266,10 +276,11 @@ class Network:
             if road not in self.roads:
                 continue
             self.split_road(road, updated[road])
+            return new_crossroads
 
     def add_calculation_point(self, point: Point):
         """Adds a point that distance is measured from, or to. After adding two points, the next point will remove the previous two.
-        Points currently have to be on the same linestring."""
+        """
         clear_plotted_calculation_points = False
         calculation_point = None
 
@@ -337,8 +348,9 @@ class Network:
 
         else:
             # sets an existing point as a point of a new road
+            point = overlapping_point
             point_overlaps = True
-            self.current_road_points.append(overlapping_point)
+            self.current_road_points.append(point)
 
         if len(self.current_road_points) == 2:
             new_road = self.add_road(self.current_road_points)

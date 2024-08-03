@@ -105,7 +105,8 @@ class UI:
 
         self.plotted_lines = {}
         self.plotted_points = {}
-        self.plotted_calculation_points = []
+        self.plotted_crossroads = {}
+        self.plotted_calculation_points = {}
         self.plotted_hitboxes = {}
 
         button = tk.Button(self.root, text="Exit")
@@ -118,12 +119,23 @@ class UI:
         for plotted_point in self.plotted_points.values():
             plotted_point.set_color(NORMAL_P_COLOR)
 
-    def remove_plotted_point(self, point):
-        if point not in self.plotted_points.keys():
+    def remove_plotted_point(self, point, type: PointType):
+        match type:
+            case PointType.NORMAL:
+                point_storage = self.plotted_points
+            case PointType.SELECTED:
+                point_storage = self.plotted_points
+            case PointType.INTERSECTION:
+                color = INTERSECTION_P_COLOR
+                point_storage = self.plotted_crossroads
+            case PointType.CALCULATION:
+                color = CALCULATION_P_COLOR
+                point_storage = self.plotted_calculation_points
+        if point not in point_storage.keys():
             print("POINT NOT IN PLOTTED_POINTS DICT KEYS!")
             return
-        self.plotted_points[point].remove()
-        del self.plotted_points[point]
+        point_storage[point].remove()
+        del point_storage[point]
 
     def remove_plotted_road(self, road):
         if road not in self.plotted_lines.keys():
@@ -147,6 +159,7 @@ class UI:
                 color = SELECTED_P_COLOR
             case PointType.INTERSECTION:
                 color = INTERSECTION_P_COLOR
+                point_storage = self.plotted_crossroads
             case PointType.CALCULATION:
                 color = CALCULATION_P_COLOR
                 point_storage = self.plotted_calculation_points
@@ -169,26 +182,28 @@ class UI:
             self.reset_plotted_point_colors()
             point = Point(event.xdata, event.ydata)
             output = self.network.add_point_to_road(point)
-            self.plot_point(output[0], type=PointType.NORMAL)
-            self.plot_hitbox(point)
+
             if output[1] == True:
                 self.plotted_points[output[0]].set_color(
                     SELECTED_P_COLOR)
+            else:
+                self.plot_point(output[0], type=PointType.NORMAL)
+                self.plot_hitbox(point)
             if isinstance(output[2], LineString):
                 self.plot_road(output[2])
             for crossroad in output[3]:
-                print(crossroad)
+                print(f"Crossroad: {crossroad}")
                 self.plot_point(crossroad, type=PointType.INTERSECTION)
         elif event.button == MouseButton.MIDDLE:
             point = Point(event.xdata, event.ydata)
             output = self.network.add_calculation_point(point)
             if output[1] == True:
                 # clear plotted calculation points
-                for plotted_point in self.plotted_calculation_points:
+                for plotted_point in self.plotted_calculation_points.values():
                     plotted_point.remove()
                 self.plotted_calculation_points.clear()
             if output[0] is not None:
-                self.plot_point(output[0], type=PointType.CALCULATION)
+                self.plot_point(output[0][0], type=PointType.CALCULATION)
         else:
             print("Invalid input!")
 
