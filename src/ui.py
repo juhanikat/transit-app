@@ -115,6 +115,73 @@ class UI:
 
         self.canvas.mpl_connect('button_press_event', self.onclick)
 
+    def redraw(self):
+        lines = list(self.plotted_lines.keys())
+        for line in lines:
+            if line not in self.network.roads:
+                self.remove_plotted_road(line)
+
+        lines = list(self.plotted_lines.keys())
+        for road in self.network.roads:
+            if road not in lines:
+                self.plot_road(road)
+
+        points = list(self.plotted_points.keys())
+        for point in points:
+            if point not in self.network.points:
+                self.remove_plotted_point(point, type=PointType.NORMAL)
+
+        points = list(self.plotted_points.keys())
+        for point in self.network.points:
+            if point not in points:
+                self.plot_point(point, type=PointType.NORMAL)
+
+        crossroads = list(self.plotted_crossroads.keys())
+        for crossroad in crossroads:
+            if crossroad not in self.network.crossroads:
+                self.remove_plotted_point(
+                    crossroad, type=PointType.INTERSECTION)
+
+        crossroads = list(self.plotted_crossroads.keys())
+        for crossroad in self.network.crossroads:
+            if crossroad not in crossroads:
+                self.plot_point(crossroad, type=PointType.INTERSECTION)
+
+        hitboxes = list(self.plotted_hitboxes.keys())
+        for hitbox in hitboxes:
+            if hitbox not in self.network.hitboxes:
+                self.remove_hitbox(
+                    hitbox)
+
+        hitboxes = list(self.plotted_hitboxes.keys())
+        for hitbox in self.network.hitboxes:
+            if hitbox not in hitboxes:
+                self.plot_hitbox(hitbox)
+
+        if self.network.calculation_points:
+            if len(self.network.calculation_points) == 1:
+                network_calc_points = [self.network.calculation_points[0][0]]
+            elif len(self.network.calculation_points) == 2:
+                network_calc_points = [
+                    self.network.calculation_points[0][0], self.network.calculation_points[1][0]]
+            calculation_points = list(self.plotted_calculation_points.keys())
+            for calculation_point in calculation_points:
+                if calculation_point not in network_calc_points:
+                    self.remove_plotted_point(
+                        calculation_point, type=PointType.CALCULATION)
+
+        if self.network.calculation_points:
+            if len(self.network.calculation_points) == 1:
+                network_calc_points = [self.network.calculation_points[0][0]]
+            elif len(self.network.calculation_points) == 2:
+                network_calc_points = [
+                    self.network.calculation_points[0][0], self.network.calculation_points[1][0]]
+            calculation_points = list(self.plotted_calculation_points.keys())
+            for calculation_point in network_calc_points:
+                if calculation_point not in calculation_points:
+                    self.plot_point(
+                        calculation_point, type=PointType.CALCULATION)
+
     def reset_plotted_point_colors(self):
         for plotted_point in self.plotted_points.values():
             plotted_point.set_color(NORMAL_P_COLOR)
@@ -126,10 +193,8 @@ class UI:
             case PointType.SELECTED:
                 point_storage = self.plotted_points
             case PointType.INTERSECTION:
-                color = INTERSECTION_P_COLOR
                 point_storage = self.plotted_crossroads
             case PointType.CALCULATION:
-                color = CALCULATION_P_COLOR
                 point_storage = self.plotted_calculation_points
         if point not in point_storage.keys():
             print("POINT NOT IN PLOTTED_POINTS DICT KEYS!")
@@ -143,6 +208,13 @@ class UI:
             return
         self.plotted_lines[road].remove()
         del self.plotted_lines[road]
+
+    def remove_hitbox(self, hitbox):
+        if hitbox not in self.plotted_hitboxes.keys():
+            print("HITBOX NOT IN PLOTTED_HITBOXES DICT KEYS!")
+            return
+        self.plotted_hitboxes[hitbox].remove()
+        del self.plotted_hitboxes[hitbox]
 
     def plot_road(self, road):
         plotted_line = self.ax.plot(
@@ -186,27 +258,14 @@ class UI:
             if output[1] == True:
                 self.plotted_points[output[0]].set_color(
                     SELECTED_P_COLOR)
-            else:
-                self.plot_point(output[0], type=PointType.NORMAL)
-                self.plot_hitbox(point)
-            if isinstance(output[2], LineString):
-                self.plot_road(output[2])
-            for crossroad in output[3]:
-                print(f"Crossroad: {crossroad}")
-                self.plot_point(crossroad, type=PointType.INTERSECTION)
+
         elif event.button == MouseButton.MIDDLE:
             point = Point(event.xdata, event.ydata)
             output = self.network.add_calculation_point(point)
-            if output[1] == True:
-                # clear plotted calculation points
-                for plotted_point in self.plotted_calculation_points.values():
-                    plotted_point.remove()
-                self.plotted_calculation_points.clear()
-            if output[0] is not None:
-                self.plot_point(output[0][0], type=PointType.CALCULATION)
         else:
             print("Invalid input!")
 
+        self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
         self.canvas.draw()
 
     def start_ui(self):

@@ -40,6 +40,7 @@ class Network:
         self.current_road_connects_to = None
         self.current_road_first_point_existing = False
         self.crossroads = []  # Points
+        self.hitboxes = {}
 
         # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
         self.calculation_points = {}
@@ -322,7 +323,7 @@ class Network:
     def check_point_overlap(self, point: Point):
         """Checks if <point> overlaps with an existing points hitbox, and returns the existing point if so."""
         for other_point in self.points:
-            hitbox = create_hitbox(other_point)
+            hitbox = self.hitboxes[other_point]
             if point.within(hitbox):
                 return other_point
         return False
@@ -344,6 +345,7 @@ class Network:
         if not overlapping_point:
             # create new point normally
             self.points.append(point)
+            self.hitboxes[point] = create_hitbox(point)
             self.current_road_points.append(point)
 
         else:
