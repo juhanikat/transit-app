@@ -412,9 +412,3 @@ class Network:
             self.add_calculation_point(point)
         else:
             print("Invalid input!")
-
-
-if __name__ == "__main__":
-    n = Network()
-    ui = UI(n)
-    ui.start_ui()
