@@ -119,6 +119,7 @@ class UI:
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
         self.canvas.mpl_connect('button_press_event', self.onclick)
+        self.canvas.mpl_connect('key_press_event', self.onkey)
 
     def print_all_roads(self):
         print(self.network.roads)
@@ -250,6 +251,14 @@ class UI:
     def plot_hitbox(self, point):
         plotted_hitbox = self.ax.plot(*create_hitbox(point).exterior.xy)[0]
         self.plotted_hitboxes[point] = plotted_hitbox
+
+    def onkey(self, event):
+        if event.key == "c":
+            point = Point(event.xdata, event.ydata)
+            output = self.network.add_calculation_point(point)
+        
+        self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
+        self.canvas.draw()
 
     def onclick(self, event):
         if PRINT_CLICK_INFO:
