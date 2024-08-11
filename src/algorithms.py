@@ -67,7 +67,6 @@ class Dijkstra:
                     self.distances[node_b] = new_distance
                     previous[node_b] = node_a
                     new_pair = (new_distance, node_b)
-                    print(queue, new_pair)
                     heapq.heappush(queue, new_pair)
 
         if self.distances[end_node] == float("inf"):

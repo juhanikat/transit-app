@@ -5,7 +5,7 @@ from shapely import intersection, snap
 from shapely.geometry import LineString, Point, Polygon, box, MultiLineString
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points, split
-from constants import HITBOX_SIZE, NORMAL_P_COLOR, SELECTED_P_COLOR, INTERSECTION_P_COLOR, CALCULATION_P_COLOR
+from constants import HITBOX_SIZE, NORMAL_P_COLOR, SELECTED_P_COLOR, INTERSECTION_P_COLOR, CALCULATION_P_COLOR, CALCULATION_P_DISTANCE
 from algorithms import DFS, Dijkstra
 from ui import UI
 
@@ -41,6 +41,9 @@ class Network:
         self.current_road_first_point_existing = False
         self.hitboxes = {}
 
+        # Used for every road loop inside shortest_path function and its helper functions
+        self.temp_roads = []
+
         # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
         self.calculation_points = {}
 
@@ -69,76 +72,100 @@ class Network:
                 return True
         return False
 
+    def find_and_move_road(self, point: Point):
+        for road in self.temp_roads.copy():
+            if point.dwithin(road, 1e-8):
+                self.temp_roads.remove(road)
+                new_road = snap(road, point, 0.0001)
+                self.temp_roads.append(new_road)
+                print(f"Moved Road: {new_road}")
+                return new_road
+        return False
+
     def find_shortest_path(self, point1: Point, point2: Point):
         """Finds the shortest path between point1 and point2 along a road. Uses Dijkstra's algorithm. Returns the roads that make up the path, and the distance from start to end."""
+
+        if not self.connected(point1, point2):
+            return False
         d = Dijkstra()
         start_road = None
         end_road = None
         start_road_parts = None
         end_road_parts = None
-        # create edges for graph
-        road: LineString
-        for road in self.roads.copy():
-            if point1.dwithin(road, 1e-8):
-                # road gets removed becuase it is moved very slightly
-                self.remove_road(road)
-                road = snap(road, point1, tolerance=0.0001)
-                self.add_road(LineString([road.coords[0], road.coords[2]]))
+        self.temp_roads = self.roads.copy()
 
-                start_road = road
-                start_road_parts = split(start_road, point1).geoms
+        start_road = self.find_and_move_road(point1)
+        end_road = self.find_and_move_road(point2)
 
-                d.add_node(start_road_parts[0].coords[0])
-                d.add_node(point1.coords[0])
-                d.add_node(start_road_parts[1].coords[1])
+        start_road_parts = split(start_road, point1).geoms
+        print("START ROAD PARTS")
+        for part in start_road_parts:
+            print(part)
+        print("")
 
-                d.add_edge(
-                    start_road_parts[0].coords[0], point1.coords[0], start_road_parts[0].length)
-                d.add_edge(
-                    point1.coords[0], start_road_parts[0].coords[0], start_road_parts[0].length)
-                d.add_edge(
-                    point1.coords[0], start_road_parts[1].coords[1],  start_road_parts[1].length)
-                d.add_edge(
-                    start_road_parts[1].coords[1], point1.coords[0], start_road_parts[1].length)
+        d.add_node(start_road_parts[0].coords[0])
+        if len(start_road_parts) > 1:
+            d.add_node(point1.coords[0])
+            d.add_node(start_road_parts[1].coords[1])
+        else:
+            d.add_node(start_road_parts[0].coords[1])
 
-            if point2.dwithin(road, 1e-8):
-                # road gets removed becuase it is moved very slightly DOESNT WORK WITH ONLY 1 ROAD FIX
-                self.remove_road(road)
-                road = snap(road, point2, tolerance=0.0001)
-                print(f"ROADDDDD: {road}")
-                self.add_road(LineString([road.coords[0], road.coords[2]]))
+        if len(start_road_parts) > 1:
+            d.add_edge(
+                start_road_parts[0].coords[0], point1.coords[0], start_road_parts[0].length)
+            d.add_edge(
+                point1.coords[0], start_road_parts[0].coords[0], start_road_parts[0].length)
+            d.add_edge(
+                point1.coords[0], start_road_parts[1].coords[1],  start_road_parts[1].length)
+            d.add_edge(
+                start_road_parts[1].coords[1], point1.coords[0], start_road_parts[1].length)
+        else:
+            d.add_edge(
+                start_road_parts[0].coords[0], start_road_parts[0].coords[1], start_road_parts[0].length)
+            d.add_edge(
+                start_road_parts[0].coords[1], start_road_parts[0].coords[0], start_road_parts[0].length)
 
-                end_road = road
-                end_road_parts = split(end_road, point2).geoms
+        end_road_parts = split(end_road, point2).geoms
+        print("END ROAD PARTS")
+        for part in end_road_parts:
+            print(part)
+        print("")
 
-                d.add_node(end_road_parts[0].coords[0])
-                d.add_node(point2.coords[0])
-                d.add_node(end_road_parts[1].coords[1])
+        d.add_node(end_road_parts[0].coords[0])
+        if len(end_road_parts) > 1:
+            d.add_node(point2.coords[0])
+            d.add_node(end_road_parts[1].coords[1])
+        else:
+            d.add_node(end_road_parts[0].coords[1])
 
-                d.add_edge(
-                    end_road_parts[0].coords[0], point2.coords[0], end_road_parts[0].length)
-                d.add_edge(
-                    point2.coords[0], end_road_parts[0].coords[0], end_road_parts[0].length)
-                d.add_edge(
-                    end_road_parts[1].coords[1], point2.coords[0], end_road_parts[1].length)
-                d.add_edge(
-                    point2.coords[0], end_road_parts[1].coords[1], end_road_parts[1].length)
+        if len(end_road_parts) > 1:
+            d.add_edge(
+                end_road_parts[0].coords[0], point2.coords[0], end_road_parts[0].length)
+            d.add_edge(
+                point2.coords[0], end_road_parts[0].coords[0], end_road_parts[0].length)
+            d.add_edge(
+                end_road_parts[1].coords[1], point2.coords[0], end_road_parts[1].length)
+            d.add_edge(
+                point2.coords[0], end_road_parts[1].coords[1], end_road_parts[1].length)
+        else:
+            d.add_edge(
+                end_road_parts[0].coords[0], end_road_parts[0].coords[1], end_road_parts[0].length)
+            d.add_edge(
+                end_road_parts[0].coords[1], end_road_parts[0].coords[0], end_road_parts[0].length)
 
-        if not start_road:
-            print("point 1 is not on any road!")
-            return
-        if not end_road:
-            print("point 2 is not on any road!")
-            return
+        self.temp_roads += list(start_road_parts) + list(end_road_parts)
 
+        point: Point
         for point in self.points:
             d.add_node(point.coords[0])
+            other_point: Point
             for other_point in self.points:
-                d.add_node(other_point.coords[0])
                 if point is other_point:
                     continue
+                d.add_node(other_point.coords[0])
+
                 road: LineString
-                for road in self.roads + list(start_road_parts) + list(end_road_parts):
+                for road in self.temp_roads:
                     # checks if road connects point and other point
                     if (road.coords[0] == point.coords[0]
                         or road.coords[1] == point.coords[0]) and (road.coords[0] == other_point.coords[0]
@@ -148,10 +175,8 @@ class Network:
                         d.add_edge(
                             other_point.coords[0], point.coords[0], road.length)
 
-        print(d.graph)
         roads, end_distance = d.find_distances(
             point1.coords[0], point2.coords[0])
-        print(len(self.roads))
         print("SELF ROADS")
         print(self.roads)
         return (roads, end_distance)
@@ -181,6 +206,7 @@ class Network:
                 return False
 
     def connected(self, point1: Point, point2: Point):
+        """Returns True if <point1> and <point2> are connected by roads, or False otherwise."""
         dfs = DFS(self.roads)
         start_road = None
         road: LineString
@@ -288,20 +314,17 @@ class Network:
     def add_calculation_point(self, point: Point):
         """Adds a point that distance is measured from, or to. After adding two points, the next point will remove the previous two.
         """
-        clear_plotted_calculation_points = False
-        calculation_point = None
 
         if len(self.calculation_points) == 2:
             self.calculation_points.clear()
-            clear_plotted_calculation_points = True
 
         road: LineString
         for road in self.roads:
-            nearest_on_road = nearest_points(point, road)[1]
-            snapped_point = snap(point, nearest_on_road, tolerance=0.7)
-            # if calculation point is close enough to any road to snap to it
-            if snapped_point != point:
-                point = snapped_point
+            if point.dwithin(road, CALCULATION_P_DISTANCE):
+                nearest_on_road = nearest_points(point, road)[1]
+                point = snap(point, nearest_on_road,
+                             tolerance=CALCULATION_P_DISTANCE)
+                # if calculation point is close enough to any road to snap to it
                 if len(self.calculation_points) == 0:
                     calculation_point = (
                         point, road.project(point), road)
@@ -311,6 +334,10 @@ class Network:
                         point, road.project(point), road)
                     self.calculation_points[1] = calculation_point
 
+                    print(
+                        f"CALCULATION POINT 1: {self.calculation_points[0][0]}")
+                    print(
+                        f"CALCULATION POINT 2: {self.calculation_points[1][0]}")
                     """
                     print(
                         f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
@@ -319,12 +346,16 @@ class Network:
                     """
                     shortest_path = self.find_shortest_path(
                         self.calculation_points[0][0], self.calculation_points[1][0])
-                    print(
-                        f"Distance from point 1 to point 2: {shortest_path[1]}")
-                    print(
-                        f"Roads used: {shortest_path[0]}")
+                    if shortest_path:
+                        print(
+                            f"Distance from point 1 to point 2: {shortest_path[1]}")
+                        print(
+                            f"Points that the route goes through: {shortest_path[0]}")
+                    else:
+                        print("No path between calculation points!")
+                return True
 
-        return (calculation_point, clear_plotted_calculation_points)
+        return False
 
     def check_point_overlap(self, point: Point):
         """Checks if <point> overlaps with an existing points hitbox, and returns the existing point if so."""
