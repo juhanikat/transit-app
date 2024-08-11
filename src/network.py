@@ -1,14 +1,14 @@
-import matplotlib.pyplot as plt
 import mplcursors
 from matplotlib.backend_bases import MouseButton
 from shapely import intersection, snap
-from shapely.geometry import LineString, Point, Polygon, box, MultiLineString
+from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points, split
-from constants import HITBOX_SIZE, NORMAL_P_COLOR, SELECTED_P_COLOR, INTERSECTION_P_COLOR, CALCULATION_P_COLOR, CALCULATION_P_DISTANCE
-from algorithms import DFS, Dijkstra
-from ui import UI
 
+from algorithms import DFS, Dijkstra
+from constants import (CALCULATION_P_COLOR, CALCULATION_P_DISTANCE,
+                       HITBOX_SIZE, INTERSECTION_P_COLOR, NORMAL_P_COLOR,
+                       SELECTED_P_COLOR)
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
 NO_CURSOR = False  # No yellow boxes

@@ -1,11 +1,12 @@
 import tkinter as tk
-from matplotlib.backend_bases import MouseButton
-from shapely.geometry import Point, Polygon, box
+
 # Implement the default Matplotlib key bindings.
-from matplotlib.backend_bases import key_press_handler
+from matplotlib.backend_bases import MouseButton, key_press_handler
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2Tk)
 from matplotlib.figure import Figure
+from shapely.geometry import Point, Polygon, box
+
 """
 root = tkinter.Tk()
 root.wm_title("Embedding in Tk")
@@ -58,8 +59,9 @@ canvas.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True)
 tkinter.mainloop()
 """
 from enum import Enum
-from constants import NORMAL_P_COLOR, SELECTED_P_COLOR, INTERSECTION_P_COLOR, CALCULATION_P_COLOR, HITBOX_SIZE
 
+from constants import (CALCULATION_P_COLOR, HITBOX_SIZE, INTERSECTION_P_COLOR,
+                       NORMAL_P_COLOR, SELECTED_P_COLOR)
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
 
