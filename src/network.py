@@ -1,13 +1,14 @@
 import mplcursors
 from matplotlib.backend_bases import MouseButton
-from shapely import intersection, snap
+from shapely import equals, intersection, snap
 from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points, split
 
 from algorithms import DFS, Dijkstra
 from constants import (CALCULATION_P_COLOR, CALCULATION_P_DISTANCE,
-                       HITBOX_SIZE, INTERSECTION_P_COLOR, NORMAL_P_COLOR,
+                       HITBOX_SIZE, INTERSECTION_P_COLOR,
+                       MIN_DISTANCE_WHEN_PLACING_POINT, NORMAL_P_COLOR,
                        SELECTED_P_COLOR)
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
@@ -36,16 +37,19 @@ class Network:
     def __init__(self) -> None:
         self.points = []  # All points except calculation points
         self.roads = []  # LineStrings
-        self.current_road_points = []  # Points
+        self.temp_points = []  # Points that the currently building road is using
+        self.current_road_points = []
         self.current_road_connects_to = None
         self.current_road_first_point_existing = False
         self.hitboxes = {}
+        self.temp_hitboxes = {}  # for temp points
 
         # Used for every road loop inside shortest_path function and its helper functions
         self.temp_roads = []
 
         # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
         self.calculation_points = {}
+        self.highlighted_path = None
 
         self.counter = Counter()
 
@@ -61,14 +65,13 @@ class Network:
         cursor.connect(
             "add", lambda sel: joku(sel))
 
-    def remove_road(self, road):
-        "Removes road."
-        self.roads.remove(road)
-
     def invalid_point_placement(self, point: Point):
-        """Returns True if added point is very near an existing point, or False otherwise."""
+        """Returns True if added point is very near an existing point or an existing road, or False otherwise."""
         for existing_point in self.points:
-            if point.dwithin(existing_point, 1e-8):
+            if point.dwithin(existing_point, MIN_DISTANCE_WHEN_PLACING_POINT):
+                return True
+        for existing_road in self.roads:
+            if point.dwithin(existing_road, MIN_DISTANCE_WHEN_PLACING_POINT):
                 return True
         return False
 
@@ -175,11 +178,13 @@ class Network:
                         d.add_edge(
                             other_point.coords[0], point.coords[0], road.length)
 
-        roads, end_distance = d.find_distances(
+        points, end_distance = d.find_distances(
             point1.coords[0], point2.coords[0])
+        self.highlighted_path = MultiLineString([points])
+        print(f"MOIII {self.highlighted_path}")
         print("SELF ROADS")
         print(self.roads)
-        return (roads, end_distance)
+        return (points, end_distance)
 
     def shared_coords(self, object1: LineString, object2: LineString):
         """Returns True if object1 and object2 share any coordinates, or False otherwise. Objects can be Points or LineStrings.
@@ -259,7 +264,7 @@ class Network:
                 [split_points[-1].coords[0], road.coords[1]])
             new_roads.append(last_road)
 
-        self.remove_road(road)
+        self.roads.remove(road)
         return new_roads
 
     def create_crossroads(self):
@@ -372,25 +377,27 @@ class Network:
             point (Point): _description_
 
         Returns:
-            tuple: A tuple containing the added point, boolean that tells if added point was an existing one, the added road if one was built and any crossroads that were made.
+
         """
         point_overlaps = False
         overlapping_point: Point = self.check_point_overlap(point)
 
         if not overlapping_point:
-            # create new point normally
-            self.points.append(point)
-            self.hitboxes[point] = create_hitbox(point)
+            if self.invalid_point_placement(point):
+                print("INVALID POINT PLACEMENT")
+                return
+            self.temp_points.append(point)
+            self.temp_hitboxes[point] = create_hitbox(point)
         else:
             # sets an existing point as a point of a new road
             point = overlapping_point
-            point_overlaps = True
+            if len(self.current_road_points) != 1:
+                # doesn't highlight ending point because unneeded
+                point_overlaps = True
 
         self.current_road_points.append(point)
         if len(self.current_road_points) == 2:
-            print(self.current_road_points)
             self.add_road(self.current_road_points)
-            self.current_road_points.clear()
 
         return (point, point_overlaps)
 
@@ -406,25 +413,39 @@ class Network:
         else:
             new_road = added
 
+        for road in self.roads:
+            if equals(road, new_road):
+                print("CANT ADD ROAD")
+                print(new_road.coords)
+                print(road.coords)
+                self.temp_points.clear()
+                self.temp_hitboxes.clear()
+                self.current_road_points.clear()
+                return False
+
         self.roads.append(new_road)
         if check_crossroads:
             crossroads = self.create_crossroads()
             if crossroads is False:
                 print("Crossroads was False")
-                self.remove_road(new_road)
-                # deletes current road points if they weren't permanent
-                for point in self.current_road_points:
-                    to_be_removed = True
-                    for road in self.roads:
-                        if point.coords[0] == road.coords[0] or point.coords[0] == road.coords[1]:
-                            to_be_removed = False
-                            break
-                    if to_be_removed:
-                        self.points.remove(point)
-                        del self.hitboxes[point]
+                self.roads.remove(road)
+                self.temp_points.clear()
+                self.temp_hitboxes.clear()
+                self.current_road_points.clear()
                 print(f"Can't create road {new_road}")
                 return False
+
         self.create_cursor()
+        for point in self.temp_points:
+            self.points.append(point)
+        for point, hitbox in self.temp_hitboxes.items():
+            print("Moi")
+            self.hitboxes[point] = hitbox
+        self.temp_points.clear()
+        self.temp_hitboxes.clear()
+        self.current_road_points.clear()
+        print(self.hitboxes)
+
         print(f"Amount of roads: {len(self.roads)}")
         return new_road
 

@@ -5,6 +5,7 @@ from matplotlib.backend_bases import MouseButton, key_press_handler
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2Tk)
 from matplotlib.figure import Figure
+from shapely import get_coordinates
 from shapely.geometry import Point, Polygon, box
 
 """
@@ -104,8 +105,10 @@ class UI:
 
         self.plotted_lines = {}
         self.plotted_points = {}  # All points except calculation points
+        self.plotted_temp_points = {}  # Points for the currently building road
         self.plotted_calculation_points = {}
         self.plotted_hitboxes = {}
+        self.plotted_highlighted_path = None
 
         exit_button = tk.Button(
             self.root, command=self.root.destroy, text="Exit")
@@ -143,6 +146,18 @@ class UI:
                 self.plot_point(point, type=PointType.NORMAL)
                 self.plot_hitbox(point)
 
+        points = list(self.plotted_temp_points.keys())
+        for point in points:
+            if point not in self.network.temp_points:
+                self.remove_plotted_point(point, type=PointType.NORMAL)
+                self.remove_hitbox(point)
+
+        points = list(self.plotted_temp_points.keys())
+        for point in self.network.temp_points:
+            if point not in points:
+                self.plot_point(point, type=PointType.NORMAL)
+                self.plot_hitbox(point)
+
         if self.network.calculation_points:
             if len(self.network.calculation_points) == 1:
                 network_calc_points = [self.network.calculation_points[0][0]]
@@ -166,6 +181,18 @@ class UI:
                 if calculation_point not in calculation_points:
                     self.plot_point(
                         calculation_point, type=PointType.CALCULATION)
+
+        if self.plotted_highlighted_path:
+            self.plotted_highlighted_path.remove()
+            self.plotted_highlighted_path = None
+
+        if self.network.highlighted_path:
+            x = [coords[0]
+                 for coords in get_coordinates(self.network.highlighted_path)]
+            y = [coords[1]
+                 for coords in get_coordinates(self.network.highlighted_path)]
+            self.plotted_highlighted_path = self.ax.plot(
+                x, y, "b")[0]
 
     def reset_plotted_point_colors(self):
         for plotted_point in self.plotted_points.values():
@@ -235,7 +262,7 @@ class UI:
             self.reset_plotted_point_colors()
             point = Point(event.xdata, event.ydata)
             output = self.network.add_point_to_road(point)
-            if output[1] is True:
+            if output and output[1] is True:
                 self.plotted_points[output[0]].set_color(
                     SELECTED_P_COLOR)
         elif event.button == MouseButton.MIDDLE:
