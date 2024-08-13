@@ -256,7 +256,9 @@ class UI:
         if event.key == "c":
             point = Point(event.xdata, event.ydata)
             output = self.network.add_calculation_point(point)
-        
+        else:
+            print("Invalid input!")
+
         self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
         self.canvas.draw()
 

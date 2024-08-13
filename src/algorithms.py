@@ -1,6 +1,7 @@
 """Copied from TIRA 2024 material."""
 
 import heapq
+import time
 
 
 class DFS:
@@ -44,6 +45,7 @@ class Dijkstra:
 
     def find_distances(self, start_node, end_node):
         """Returns shortest path between start_node and end_node, and the distance from start_node to end_node."""
+        start_time = time.time()
         self.distances = {}
         for node in self.graph.keys():
             self.distances[node] = float("inf")
@@ -79,4 +81,6 @@ class Dijkstra:
             node = previous[node]
 
         path.reverse()
+        end_time = time.time()
+        print(f"TIME FOR FIND_DISTANCES(): {end_time - start_time}")
         return (path, self.distances[end_node])
