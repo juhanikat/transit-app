@@ -8,9 +8,15 @@ jobs:
     steps:
     - name : Checkout code
       uses : actions/checkout@v4
+
+    - name: Update pip
+      run: python -m pip install --upgrade pip
+
+    - name: Install Poetry
+      run: pip install poetry
       
-    - name : Poetry Install 
-      run : poetry install
+    - name : Use Poetry Install to install dependencies 
+      run : poetry install --with dev
       
     - name : Run tests 
       run : poetry run python -m unittest -v .\src\tests\test_network.py
