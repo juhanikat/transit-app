@@ -8,8 +8,14 @@ jobs:
     steps:
     - name : Checkout code
       uses : actions/checkout@v4
+
+    - name: Update pip
+      run: python -m pip install --upgrade pip
+
+    - name: Install Poetry
+      run: pip install pylint poetry
       
-    - name : Poetry Install 
+    - name : Use Poetry Install to install dependencies 
       run : poetry install
       
     - name : Run tests 
