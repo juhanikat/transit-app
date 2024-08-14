@@ -61,8 +61,9 @@ tkinter.mainloop()
 """
 from enum import Enum
 
-from constants import (CALCULATION_P_COLOR, HITBOX_SIZE, INTERSECTION_P_COLOR,
-                       NORMAL_P_COLOR, SELECTED_P_COLOR)
+from constants.constants import (CALCULATION_P_COLOR, HITBOX_SIZE,
+                                 INTERSECTION_P_COLOR, NORMAL_P_COLOR,
+                                 SELECTED_P_COLOR)
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
 

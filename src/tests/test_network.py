@@ -2,7 +2,7 @@ import unittest
 
 from shapely import LineString, Point
 
-from src import network
+from network import network
 
 
 class TestNetwork(unittest.TestCase):

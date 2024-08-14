@@ -1,5 +1,5 @@
-from network import Network
-from ui import UI
+from network.network import Network
+from ui.ui import UI
 
 if __name__ == "__main__":
     ui = UI(Network())

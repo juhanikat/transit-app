@@ -8,11 +8,11 @@ from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points, split
 
-from algorithms import DFS, Dijkstra
-from constants import (CALCULATION_P_COLOR, CALCULATION_P_DISTANCE,
-                       HITBOX_SIZE, INTERSECTION_P_COLOR,
-                       MIN_DISTANCE_WHEN_PLACING_POINT, NORMAL_P_COLOR,
-                       SELECTED_P_COLOR)
+from algorithms.algorithms import DFS, Dijkstra
+from constants.constants import (CALCULATION_P_COLOR, CALCULATION_P_DISTANCE,
+                                 HITBOX_SIZE, INTERSECTION_P_COLOR,
+                                 MIN_DISTANCE_WHEN_PLACING_POINT,
+                                 NORMAL_P_COLOR, SELECTED_P_COLOR)
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
 NO_CURSOR = False  # No yellow boxes
