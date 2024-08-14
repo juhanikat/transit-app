@@ -116,6 +116,17 @@ class UI:
             self.root, command=self.print_all_roads, text="All Roads")
         exit_button.pack()
         print_roads_button.pack()
+        x_coord_label = tk.Label(self.root, text="X-coordinate")
+        self.x_coord_entry = tk.Entry(self.root)
+        y_coord_label = tk.Label(self.root, text="Y-coordinate")
+        self.y_coord_entry = tk.Entry(self.root)
+        add_point_button = tk.Button(
+            self.root, command=self.handle_add_point, text="Add Point")
+        x_coord_label.pack()
+        self.x_coord_entry.pack()
+        y_coord_label.pack()
+        self.y_coord_entry.pack()
+        add_point_button.pack()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
         self.canvas.mpl_connect('button_press_event', self.onclick)
@@ -123,6 +134,12 @@ class UI:
 
     def print_all_roads(self):
         print(self.network.roads)
+
+    def handle_add_point(self):
+        point = Point(self.x_coord_entry.get(), self.y_coord_entry.get())
+        self.x_coord_entry.delete(0, tk.END)
+        self.y_coord_entry.delete(0, tk.END)
+        self.network.add_point_to_road(point)
 
     def redraw(self):
         lines = list(self.plotted_lines.keys())
