@@ -28,4 +28,4 @@ jobs:
       run: poetry install --with dev
       
     - name: Test
-      run: poetry run python -m unittest -v test_network.py
+      run: poetry run python -m unittest -v src/tests/test_network.py
