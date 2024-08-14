@@ -8,11 +8,11 @@ from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points, split
 
-from algorithms import DFS, Dijkstra
-from constants import (CALCULATION_P_COLOR, CALCULATION_P_DISTANCE,
-                       HITBOX_SIZE, INTERSECTION_P_COLOR,
-                       MIN_DISTANCE_WHEN_PLACING_POINT, NORMAL_P_COLOR,
-                       SELECTED_P_COLOR)
+from .algorithms import DFS, Dijkstra
+from .constants import (CALCULATION_P_COLOR, CALCULATION_P_DISTANCE,
+                        HITBOX_SIZE, INTERSECTION_P_COLOR,
+                        MIN_DISTANCE_WHEN_PLACING_POINT, NORMAL_P_COLOR,
+                        SELECTED_P_COLOR)
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
 NO_CURSOR = False  # No yellow boxes
@@ -98,6 +98,7 @@ class Network:
         Returns the points that make up the path, and the distance from start point to end point."""
 
         if not self.connected(point1, point2):
+            print("POINT1 AND POINT2 ARE NOT CONNECTED")
             return False
 
         start_time1 = time.time()
