@@ -115,19 +115,28 @@ class UI:
             self.root, command=self.root.destroy, text="Exit")
         print_roads_button = tk.Button(
             self.root, command=self.print_all_roads, text="All Roads")
+
         exit_button.pack()
         print_roads_button.pack()
+
         x_coord_label = tk.Label(self.root, text="X-coordinate")
         self.x_coord_entry = tk.Entry(self.root)
         y_coord_label = tk.Label(self.root, text="Y-coordinate")
         self.y_coord_entry = tk.Entry(self.root)
         add_point_button = tk.Button(
             self.root, command=self.handle_add_point, text="Add Point")
+
         x_coord_label.pack()
         self.x_coord_entry.pack()
         y_coord_label.pack()
         self.y_coord_entry.pack()
         add_point_button.pack()
+
+        self.show_hitboxes = tk.IntVar(value=1)
+        toggle_hitboxes = tk.Checkbutton(
+            self.root, text="Show boxes around points", variable=self.show_hitboxes, onvalue=1, offvalue=0, command=self.redraw)
+        toggle_hitboxes.pack()
+
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
         self.canvas.mpl_connect('button_press_event', self.onclick)
@@ -142,7 +151,17 @@ class UI:
         self.y_coord_entry.delete(0, tk.END)
         self.network.add_point_to_road(point)
 
+        self.redraw()
+
     def redraw(self):
+        if self.show_hitboxes.get() == 0:
+            for point in list(self.plotted_points.keys()):
+                self.remove_plotted_hitbox(point)
+
+        if self.show_hitboxes.get() == 1 and len(self.plotted_hitboxes.values()) == 0:
+            for point in list(self.plotted_points.keys()):
+                self.plot_hitbox(point)
+
         lines = list(self.plotted_lines.keys())
         for line in lines:
             if line not in self.network.roads:
@@ -157,25 +176,27 @@ class UI:
         for point in points:
             if point not in self.network.points:
                 self.remove_plotted_point(point, type=PointType.NORMAL)
-                self.remove_hitbox(point)
+                self.remove_plotted_hitbox(point)
 
         points = list(self.plotted_points.keys())
         for point in self.network.points:
             if point not in points:
                 self.plot_point(point, type=PointType.NORMAL)
-                self.plot_hitbox(point)
+                if self.show_hitboxes.get() == 1:
+                    self.plot_hitbox(point)
 
         points = list(self.plotted_temp_points.keys())
         for point in points:
             if point not in self.network.temp_points:
                 self.remove_plotted_point(point, type=PointType.NORMAL)
-                self.remove_hitbox(point)
+                self.remove_plotted_hitbox(point)
 
         points = list(self.plotted_temp_points.keys())
         for point in self.network.temp_points:
             if point not in points:
                 self.plot_point(point, type=PointType.NORMAL)
-                self.plot_hitbox(point)
+                if self.show_hitboxes.get() == 1:
+                    self.plot_hitbox(point)
 
         if self.network.calculation_points:
             if len(self.network.calculation_points) == 1:
@@ -213,6 +234,8 @@ class UI:
             self.plotted_highlighted_path = self.ax.plot(
                 x, y, "b")[0]
 
+        self.canvas.draw()
+
     def reset_plotted_point_colors(self):
         for plotted_point in self.plotted_points.values():
             plotted_point.set_color(NORMAL_P_COLOR)
@@ -238,11 +261,10 @@ class UI:
         self.plotted_lines[road].remove()
         del self.plotted_lines[road]
 
-    def remove_hitbox(self, point):
+    def remove_plotted_hitbox(self, point: Point):
         if point not in self.plotted_hitboxes.keys():
             print("POINT NOT IN PLOTTED_HITBOXES DICT KEYS!")
             return
-        print(self.plotted_hitboxes[point])
         self.plotted_hitboxes[point].remove()
         del self.plotted_hitboxes[point]
 
@@ -278,7 +300,6 @@ class UI:
             print("Invalid input!")
 
         self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
-        self.canvas.draw()
 
     def onclick(self, event):
         if PRINT_CLICK_INFO:
@@ -301,7 +322,6 @@ class UI:
             print("Invalid input!")
 
         self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
-        self.canvas.draw()
 
     def start_ui(self):
         self.root.mainloop()

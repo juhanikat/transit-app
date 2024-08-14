@@ -1,5 +1,4 @@
 import time
-import timeit
 
 import mplcursors
 from matplotlib.backend_bases import MouseButton
@@ -19,20 +18,11 @@ NO_CURSOR = False  # No yellow boxes
 
 
 def create_hitbox(point: Point) -> Polygon:
+    """Creates a hitbox around a point. Used when the user wants to click the point."""
     b = point.bounds
     new_b = (b[0] - HITBOX_SIZE, b[1] - HITBOX_SIZE,
              b[2] + HITBOX_SIZE, b[3] + HITBOX_SIZE)
     return box(*new_b)
-
-
-class Counter:
-    def __init__(self):
-        self.count = 1
-
-    def __call__(self, amount=1):
-        val = self.count
-        self.count += amount
-        return val
 
 
 class Network:
@@ -42,8 +32,6 @@ class Network:
         self.roads = []  # LineStrings
         self.temp_points = []  # Points that the currently building road is using
         self.current_road_points = []
-        self.current_road_connects_to = None
-        self.current_road_first_point_existing = False
         self.hitboxes = {}
         self.temp_hitboxes = {}  # for temp points
 
@@ -53,8 +41,6 @@ class Network:
         # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
         self.calculation_points = {}
         self.highlighted_path = None
-
-        self.counter = Counter()
 
     def create_cursor(self):
         """Needs to be recreated every time new data is added?"""
@@ -296,7 +282,7 @@ class Network:
             self.calculation_points.clear()
 
         if len(self.calculation_points) == 1 and point.dwithin(self.calculation_points[0][0], 0.1):
-            print("Can't add calculation right next to another one!")
+            print("Can't add calculation point right next to another one!")
             return False
         road: LineString
         for road in self.roads:
@@ -351,15 +337,27 @@ class Network:
             hitbox = self.hitboxes[other_point]
             if point.within(hitbox):
                 return other_point
+
+        for other_point in self.temp_points:
+            hitbox = self.temp_hitboxes[other_point]
+            if point.within(hitbox):
+                return other_point
         return False
 
-    def add_point_to_road(self, point: Point) -> tuple:
-        """_summary_
+    def clear_temp(self):
+        self.temp_points.clear()
+        self.temp_hitboxes = {}
+        self.current_road_points.clear()
+
+    def add_point_to_road(self, point: Point) -> tuple | bool:
+        """Checks if a point can be added to the network, and adds it.
 
         Args:
-            point (Point): _description_
+            point (Point): The point that is added.
 
-        Returns:
+        Returns: Tuple with the added point as the first member, 
+        and a boolean telling whether or not the point overlaps another as the second member.
+        Returns False if the point could not be added.
 
         """
         point_overlaps = False
@@ -367,16 +365,22 @@ class Network:
 
         if not overlapping_point:
             if self.invalid_point_placement(point):
+                # if point is near another point or road, new road is cancelled
                 print("INVALID POINT PLACEMENT")
-                return
+                self.clear_temp()
+                return False
             self.temp_points.append(point)
             self.temp_hitboxes[point] = create_hitbox(point)
         else:
             # sets an existing point as a point of a new road
             point = overlapping_point
             if len(self.current_road_points) != 1:
-                # doesn't highlight ending point because unneeded
+                # only highlights the starting point of road, not the ending point
                 point_overlaps = True
+            elif equals(point, self.current_road_points[0]):
+                # if start and end are the same point, new road is cancelled
+                self.clear_temp()
+                return False
 
         self.current_road_points.append(point)
         if len(self.current_road_points) == 2:
@@ -399,9 +403,7 @@ class Network:
         for road in self.roads:
             if equals(road, new_road):
                 print("CANT ADD ROAD, IT IS EQUAL TO ANOTHER ROAD")
-                self.temp_points.clear()
-                self.temp_hitboxes.clear()
-                self.current_road_points.clear()
+                self.clear_temp()
                 return False
 
         self.roads.append(new_road)
@@ -410,9 +412,7 @@ class Network:
             if crossroads is False:
                 print("Crossroads was False")
                 self.roads.remove(road)
-                self.temp_points.clear()
-                self.temp_hitboxes.clear()
-                self.current_road_points.clear()
+                self.clear_temp()
                 print(f"Can't create road {new_road}")
                 return False
 
@@ -420,13 +420,8 @@ class Network:
         for point in self.temp_points:
             self.points.append(point)
         for point, hitbox in self.temp_hitboxes.items():
-            print("Moi")
             self.hitboxes[point] = hitbox
-        self.temp_points.clear()
-        self.temp_hitboxes.clear()
-        self.current_road_points.clear()
-        print(self.hitboxes)
-
+        self.clear_temp()
         print(f"Amount of roads: {len(self.roads)}")
         return new_road
 
