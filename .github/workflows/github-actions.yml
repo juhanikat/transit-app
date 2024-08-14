@@ -1,0 +1,16 @@
+name: Transit App Workflow
+run-name: Transit App Workflow
+on: [push]
+jobs:
+  unit-testing:
+    runs-on: ubuntu-latest 
+    
+    steps:
+    - name : Checkout code
+      uses : actions/checkout@v4
+      
+    - name : Poetry Install 
+      run : poetry install
+      
+    - name : Run tests 
+      run : poetry run python -m unittest -v .\src\tests\test_network.py
