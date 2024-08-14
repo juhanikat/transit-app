@@ -1,4 +1,5 @@
 .venv
 .vscode
+.github
 poetry.lock
 __pycache__/
