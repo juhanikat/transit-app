@@ -13,10 +13,10 @@ jobs:
       run: python -m pip install --upgrade pip
 
     - name: Install Poetry
-      run: pip install pylint poetry
+      run: pip install poetry
       
     - name : Use Poetry Install to install dependencies 
-      run : poetry install
+      run : poetry install --with dev
       
     - name : Run tests 
       run : poetry run python -m unittest -v .\src\tests\test_network.py
