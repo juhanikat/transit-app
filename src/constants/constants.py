@@ -9,3 +9,10 @@ CALCULATION_P_DISTANCE = 0.2
 
 # how far away a point needs to be placed from an existing geometry
 MIN_DISTANCE_WHEN_PLACING_POINT = 0.5
+
+HOW_TO_USE_TEXT = """
+Start drawing a road by clicking anywhere on the map, then click somewhere else to finish the road. Note that you can not start or end a road right next to an existing one. \n
+You can connect roads by clicking the blue points at either end of any road. \n
+Press middle mouse button (or C) to place a calculation point. Place another calculation point somewhere else to highlight the shortest path between them. \n
+You can move the map with arrow keys, and zoom in/out using the scroll wheel. \n
+"""

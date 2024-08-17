@@ -62,8 +62,8 @@ tkinter.mainloop()
 from enum import Enum
 
 from constants.constants import (CALCULATION_P_COLOR, HITBOX_SIZE,
-                                 INTERSECTION_P_COLOR, NORMAL_P_COLOR,
-                                 SELECTED_P_COLOR)
+                                 HOW_TO_USE_TEXT, INTERSECTION_P_COLOR,
+                                 NORMAL_P_COLOR, SELECTED_P_COLOR)
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
 
@@ -100,6 +100,7 @@ class UI:
         self.ax = self.fig.add_subplot()
         self.ax.set_xlim(0, 10)
         self.ax.set_ylim(0, 10)
+        self.base_scale = 1.1
         self.root = tk.Tk()
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
         self.canvas.draw()
@@ -137,10 +138,15 @@ class UI:
             self.root, text="Show boxes around points", variable=self.show_hitboxes, onvalue=1, offvalue=0, command=self.redraw)
         toggle_hitboxes.pack()
 
+        how_to_use_button = tk.Button(
+            self.root, text="How to Use", command=self.handle_how_to_use)
+        how_to_use_button.pack()
+
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
         self.canvas.mpl_connect('button_press_event', self.onclick)
         self.canvas.mpl_connect('key_press_event', self.onkey)
+        self.canvas.mpl_connect('scroll_event', self.zoom)
 
     def print_all_roads(self):
         print(self.network.roads)
@@ -152,6 +158,18 @@ class UI:
         self.network.add_point_to_road(point)
 
         self.redraw()
+
+    def handle_how_to_use(self):
+        popup = tk.Toplevel()
+        popup.title("Pop-up Window")
+        popup.geometry("600x300")
+
+        label = tk.Label(popup, text=HOW_TO_USE_TEXT, wraplength=500)
+        label.pack()
+
+        # Close button to destroy the pop-up window
+        close_button = tk.Button(popup, text="Close", command=popup.destroy)
+        close_button.pack()
 
     def redraw(self):
         if self.show_hitboxes.get() == 0:
@@ -263,7 +281,6 @@ class UI:
 
     def remove_plotted_hitbox(self, point: Point):
         if point not in self.plotted_hitboxes.keys():
-            print("POINT NOT IN PLOTTED_HITBOXES DICT KEYS!")
             return
         self.plotted_hitboxes[point].remove()
         del self.plotted_hitboxes[point]
@@ -298,6 +315,22 @@ class UI:
                 return
             point = Point(event.xdata, event.ydata)
             output = self.network.add_calculation_point(point)
+        elif event.key == "right":
+            xlim = self.ax.get_xlim()
+            self.ax.set_xlim([xlim[0] + 1,
+                              xlim[1] + 1])
+        elif event.key == "left":
+            xlim = self.ax.get_xlim()
+            self.ax.set_xlim([xlim[0] - 1,
+                              xlim[1] - 1])
+        elif event.key == "up":
+            ylim = self.ax.get_ylim()
+            self.ax.set_ylim([ylim[0] + 1,
+                              ylim[1] + 1])
+        elif event.key == "down":
+            ylim = self.ax.get_ylim()
+            self.ax.set_ylim([ylim[0] - 1,
+                              ylim[1] - 1])
         else:
             print("Invalid input!")
 
@@ -328,6 +361,28 @@ class UI:
             print("Invalid input!")
 
         self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
+
+    def zoom(self, event):
+        # get the current x and y limits
+        cur_xlim = self.ax.get_xlim()
+        cur_ylim = self.ax.get_ylim()
+        cur_xrange = (cur_xlim[1] - cur_xlim[0])*.5
+        cur_yrange = (cur_ylim[1] - cur_ylim[0])*.5
+        xdata, ydata = event.xdata, event.ydata
+        if event.button == 'up':
+            # deal with zoom in
+            scale_factor = 1/self.base_scale
+        elif event.button == 'down':
+            # deal with zoom out
+            scale_factor = self.base_scale
+        else:
+            print("weird things with zoom!")
+        # set new limits
+        self.ax.set_xlim([xdata - cur_xrange*scale_factor,
+                          xdata + cur_xrange*scale_factor])
+        self.ax.set_ylim([ydata - cur_yrange*scale_factor,
+                          ydata + cur_yrange*scale_factor])
+        self.redraw()  # force re-draw
 
     def start_ui(self):
         self.root.mainloop()
