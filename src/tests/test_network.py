@@ -23,10 +23,13 @@ class TestNetwork(unittest.TestCase):
         point3 = Point(0, 5)
         self.network.add_point_to_road(point1)
         self.network.add_point_to_road(point2)
+        self.network.add_point_to_road(point2)
         self.network.add_point_to_road(point3)
-        self.assertEqual(len(self.network.roads), 2)
+        self.assertEqual(len(self.network.roads), 3)
         self.assertEqual(self.network.roads[1], LineString(
-            [point1, point2, point3]))
+            [point1, point2]))
+        self.assertEqual(self.network.roads[2], LineString(
+            [point2, point3]))
 
     def test_adding_points(self):
         point1 = Point(0, 0)
