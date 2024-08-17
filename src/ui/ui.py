@@ -1,12 +1,17 @@
 import tkinter as tk
+from enum import Enum
 
 # Implement the default Matplotlib key bindings.
-from matplotlib.backend_bases import MouseButton, key_press_handler
+from matplotlib.backend_bases import MouseButton
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2Tk)
 from matplotlib.figure import Figure
 from shapely import get_coordinates
 from shapely.geometry import Point, Polygon, box
+
+from constants.constants import (CALCULATION_P_COLOR, DEFAULT_XLIM,
+                                 DEFAULT_YLIM, HITBOX_SIZE, HOW_TO_USE_TEXT,
+                                 NORMAL_P_COLOR, SELECTED_P_COLOR, ZOOM_AMOUNT)
 
 """
 root = tkinter.Tk()
@@ -59,11 +64,7 @@ canvas.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True)
 
 tkinter.mainloop()
 """
-from enum import Enum
 
-from constants.constants import (CALCULATION_P_COLOR, HITBOX_SIZE,
-                                 HOW_TO_USE_TEXT, INTERSECTION_P_COLOR,
-                                 NORMAL_P_COLOR, SELECTED_P_COLOR)
 
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
 
@@ -98,8 +99,8 @@ class UI:
         self.counter = Counter()
         self.fig = Figure()
         self.ax = self.fig.add_subplot()
-        self.ax.set_xlim(0, 10)
-        self.ax.set_ylim(0, 10)
+        self.ax.set_xlim(*DEFAULT_XLIM)
+        self.ax.set_ylim(*DEFAULT_YLIM)
         self.base_scale = 1.1
         self.root = tk.Tk()
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
@@ -137,6 +138,10 @@ class UI:
         toggle_hitboxes = tk.Checkbutton(
             self.root, text="Show boxes around points", variable=self.show_hitboxes, onvalue=1, offvalue=0, command=self.redraw)
         toggle_hitboxes.pack()
+
+        reset_zoom_button = tk.Button(
+            self.root, text="Reset zoom and panning", command=self.reset_zoom_and_panning)
+        reset_zoom_button.pack()
 
         how_to_use_button = tk.Button(
             self.root, text="How to Use", command=self.handle_how_to_use)
@@ -193,26 +198,26 @@ class UI:
         points = list(self.plotted_points.keys())
         for point in points:
             if point not in self.network.points:
-                self.remove_plotted_point(point, type=PointType.NORMAL)
+                self.remove_plotted_point(point, point_type=PointType.NORMAL)
                 self.remove_plotted_hitbox(point)
 
         points = list(self.plotted_points.keys())
         for point in self.network.points:
             if point not in points:
-                self.plot_point(point, type=PointType.NORMAL)
+                self.plot_point(point, point_type=PointType.NORMAL)
                 if self.show_hitboxes.get() == 1:
                     self.plot_hitbox(point)
 
         points = list(self.plotted_temp_points.keys())
         for point in points:
             if point not in self.network.temp_points:
-                self.remove_plotted_point(point, type=PointType.NORMAL)
+                self.remove_plotted_point(point, point_type=PointType.NORMAL)
                 self.remove_plotted_hitbox(point)
 
         points = list(self.plotted_temp_points.keys())
         for point in self.network.temp_points:
             if point not in points:
-                self.plot_point(point, type=PointType.NORMAL)
+                self.plot_point(point, point_type=PointType.NORMAL)
                 if self.show_hitboxes.get() == 1:
                     self.plot_hitbox(point)
 
@@ -226,7 +231,7 @@ class UI:
             for calculation_point in calculation_points:
                 if calculation_point not in network_calc_points:
                     self.remove_plotted_point(
-                        calculation_point, type=PointType.CALCULATION)
+                        calculation_point, point_type=PointType.CALCULATION)
 
         if self.network.calculation_points:
             if len(self.network.calculation_points) == 1:
@@ -238,7 +243,7 @@ class UI:
             for calculation_point in network_calc_points:
                 if calculation_point not in calculation_points:
                     self.plot_point(
-                        calculation_point, type=PointType.CALCULATION)
+                        calculation_point, point_type=PointType.CALCULATION)
 
         if self.plotted_highlighted_path:
             self.plotted_highlighted_path.remove()
@@ -258,15 +263,15 @@ class UI:
         for plotted_point in self.plotted_points.values():
             plotted_point.set_color(NORMAL_P_COLOR)
 
-    def remove_plotted_point(self, point, type: PointType):
-        match type:
+    def remove_plotted_point(self, point, point_type: PointType):
+        match point_type:
             case PointType.NORMAL:
                 point_storage = self.plotted_points
             case PointType.SELECTED:
                 point_storage = self.plotted_points
             case PointType.CALCULATION:
                 point_storage = self.plotted_calculation_points
-        if point not in point_storage.keys():
+        if point not in point_storage:
             print("POINT NOT IN PLOTTED_POINTS DICT KEYS!")
             return
         point_storage[point].remove()
@@ -290,10 +295,10 @@ class UI:
             road.xy[0], road.xy[1], label=f"Road {self.counter()}, length {road.length}")[0]
         self.plotted_lines[road] = plotted_line
 
-    def plot_point(self, point, type: PointType):
+    def plot_point(self, point, point_type: PointType):
         color = None
         point_storage = self.plotted_points
-        match type:
+        match point_type:
             case PointType.NORMAL:
                 color = NORMAL_P_COLOR
             case PointType.SELECTED:
@@ -364,24 +369,27 @@ class UI:
 
     def zoom(self, event):
         # get the current x and y limits
-        cur_xlim = self.ax.get_xlim()
-        cur_ylim = self.ax.get_ylim()
-        cur_xrange = (cur_xlim[1] - cur_xlim[0])*.5
-        cur_yrange = (cur_ylim[1] - cur_ylim[0])*.5
-        xdata, ydata = event.xdata, event.ydata
-        if event.button == 'up':
-            # deal with zoom in
-            scale_factor = 1/self.base_scale
-        elif event.button == 'down':
-            # deal with zoom out
-            scale_factor = self.base_scale
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        if event.button == 'down':
+            # zoom in
+            scale_factor = ZOOM_AMOUNT
+        elif event.button == 'up':
+            # zoom out
+            scale_factor = -ZOOM_AMOUNT
+
         else:
             print("weird things with zoom!")
         # set new limits
-        self.ax.set_xlim([xdata - cur_xrange*scale_factor,
-                          xdata + cur_xrange*scale_factor])
-        self.ax.set_ylim([ydata - cur_yrange*scale_factor,
-                          ydata + cur_yrange*scale_factor])
+        self.ax.set_xlim(xlim[0] - scale_factor,
+                         xlim[1] + scale_factor)
+        self.ax.set_ylim(ylim[0] - scale_factor,
+                         ylim[1] + scale_factor)
+        self.redraw()  # force re-draw
+
+    def reset_zoom_and_panning(self):
+        self.ax.set_xlim(*DEFAULT_XLIM)
+        self.ax.set_ylim(*DEFAULT_YLIM)
         self.redraw()  # force re-draw
 
     def start_ui(self):
