@@ -1,3 +1,5 @@
+[![Python application](https://github.com/juhanikat/transit-app/actions/workflows/python-app.yml/badge.svg)](https://github.com/juhanikat/transit-app/actions/workflows/python-app.yml)
+
 # How to install
 
 1. Install poetry [https://python-poetry.org/docs/#installation] and Python [https://www.python.org/downloads/] on your computer
