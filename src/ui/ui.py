@@ -294,6 +294,8 @@ class UI:
 
     def onkey(self, event):
         if event.key == "c":
+            if event.xdata is None or event.ydata is None:
+                return
             point = Point(event.xdata, event.ydata)
             output = self.network.add_calculation_point(point)
         else:
@@ -309,6 +311,8 @@ class UI:
         if event.button == MouseButton.RIGHT:
             return
         elif event.button == MouseButton.LEFT:
+            if event.xdata is None or event.ydata is None:
+                return
             self.reset_plotted_point_colors()
             point = Point(event.xdata, event.ydata)
             output = self.network.add_point_to_road(point)
@@ -316,6 +320,8 @@ class UI:
                 self.plotted_points[output[0]].set_color(
                     SELECTED_P_COLOR)
         elif event.button == MouseButton.MIDDLE:
+            if event.xdata is None or event.ydata is None:
+                return
             point = Point(event.xdata, event.ydata)
             output = self.network.add_calculation_point(point)
         else:
