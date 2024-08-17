@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python 3.10
-      uses: actions/setup-python@v3
+      uses: actions/setup-python@v4
       with:
         python-version: "3.10"
         
@@ -27,5 +27,5 @@ jobs:
     - name: Install dependencies with Poetry
       run: poetry install --with dev
       
-    - name: Test
-      run: poetry run python -m unittest -v src/tests/test_network.py
+    - name: Test with pytest
+      run: poetry run pytest
