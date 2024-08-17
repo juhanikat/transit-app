@@ -27,5 +27,5 @@ jobs:
     - name: Install dependencies with Poetry
       run: poetry install --with dev
       
-    - name: Test
-      run: poetry run python -m unittest -v src/tests/test_network.py
+    - name: Test with pytest
+      run: poetry run pytest
