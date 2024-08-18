@@ -1,27 +1,16 @@
 import time
 
-import mplcursors
-from matplotlib.backend_bases import MouseButton
 from shapely import equals, intersection, snap
-from shapely.geometry import LineString, MultiLineString, Point, Polygon, box
+from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points, split
 
 from algorithms.algorithms import DFS, Dijkstra
-from constants.constants import (CALCULATION_P_DISTANCE, HITBOX_SIZE,
-                                 MIN_DISTANCE_BETWEEN_POINT_AND_ROAD,
-                                 MIN_DISTANCE_WHEN_PLACING_POINT)
+from utils.utilities import create_hitbox
 
-PRINT_CLICK_INFO = False  # use to print information on each mouse click
-NO_CURSOR = False  # No yellow boxes
-
-
-def create_hitbox(point: Point) -> Polygon:
-    """Creates a hitbox around a point. Used when the user wants to click the point."""
-    b = point.bounds
-    new_b = (b[0] - HITBOX_SIZE, b[1] - HITBOX_SIZE,
-             b[2] + HITBOX_SIZE, b[3] + HITBOX_SIZE)
-    return box(*new_b)
+from ..utils.constants import (CALCULATION_P_DISTANCE,
+                               MIN_DISTANCE_BETWEEN_POINT_AND_ROAD,
+                               MIN_DISTANCE_WHEN_PLACING_POINT)
 
 
 class Network:
@@ -44,18 +33,6 @@ class Network:
         self.calculation_points = {}
         self.highlighted_path = None
 
-    def create_cursor(self):
-        """Needs to be recreated every time new data is added?"""
-        def joku(sel):
-            if NO_CURSOR:
-                sel.annotation.set_text("")
-            else:
-                sel.annotation.set_text(sel.artist)
-
-        cursor = mplcursors.cursor(hover=True)
-        cursor.connect(
-            "add", lambda sel: joku(sel))
-
     def point_near_point(self, point: Point):
         nearby_points = []
         for existing_point in self.points:
@@ -64,15 +41,6 @@ class Network:
         if len(nearby_points) == 0:
             return False
         return nearby_points
-
-    def point_near_road(self, point: Point):
-        nearby_roads = []
-        for existing_road in self.roads:
-            if point.dwithin(existing_road, MIN_DISTANCE_WHEN_PLACING_POINT):
-                nearby_roads.append(existing_road)
-        if len(nearby_roads) == 0:
-            return False
-        return nearby_roads
 
     def invalid_point_placement(self, point: Point):
         """Returns True if added point is very near an existing point or an existing road, or False otherwise."""
@@ -397,7 +365,7 @@ class Network:
         self.temp_hitboxes = {}
         self.current_road_points.clear()
 
-    def add_point_to_road(self, point: Point) -> tuple | bool:
+    def add_point(self, point: Point) -> tuple | bool:
         """Checks if a point can be added to the network, and adds it.
 
         Args:
@@ -469,7 +437,6 @@ class Network:
                 print(f"Crossroads was False, can't create road {new_road}")
                 return False
 
-        self.create_cursor()
         for point in self.temp_points:
             self.points.append(point)
         for point, hitbox in self.temp_hitboxes.items():
@@ -480,19 +447,3 @@ class Network:
         print(f"Added road: {new_road}")
         print(f"Amount of roads: {len(self.roads)}")
         return new_road
-
-    def onclick(self, event):
-        if PRINT_CLICK_INFO:
-            print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
-                  ('double' if event.dblclick else 'single', event.button,
-                   event.x, event.y, event.xdata, event.ydata))
-        if event.button == MouseButton.RIGHT:
-            return
-        elif event.button == MouseButton.LEFT:
-            point = Point(event.xdata, event.ydata)
-            self.add_point_to_road(point)
-        elif event.button == MouseButton.MIDDLE:
-            point = Point(event.xdata, event.ydata)
-            self.add_calculation_point(point)
-        else:
-            print("Invalid input!")

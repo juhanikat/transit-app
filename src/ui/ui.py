@@ -1,17 +1,20 @@
 import tkinter as tk
+import typing
 from enum import Enum
 
+import mplcursors
 # Implement the default Matplotlib key bindings.
 from matplotlib.backend_bases import MouseButton
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2Tk)
 from matplotlib.figure import Figure
 from shapely import get_coordinates
-from shapely.geometry import Point, Polygon, box
+from shapely.geometry import Point
 
 from constants.constants import (CALCULATION_P_COLOR, DEFAULT_XLIM,
-                                 DEFAULT_YLIM, HITBOX_SIZE, HOW_TO_USE_TEXT,
-                                 NORMAL_P_COLOR, SELECTED_P_COLOR, ZOOM_AMOUNT)
+                                 DEFAULT_YLIM, HOW_TO_USE_TEXT, NORMAL_P_COLOR,
+                                 SELECTED_P_COLOR, ZOOM_AMOUNT)
+from utilities import create_hitbox
 
 """
 root = tkinter.Tk()
@@ -64,8 +67,11 @@ canvas.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True)
 
 tkinter.mainloop()
 """
+if typing.TYPE_CHECKING:
+    from network.network import Network
 
 
+NO_CURSOR = False  # No yellow boxes
 PRINT_CLICK_INFO = False  # use to print information on each mouse click
 
 
@@ -73,13 +79,6 @@ class PointType(Enum):
     NORMAL = "normal"
     SELECTED = "selected"
     CALCULATION = "calculation"
-
-
-def create_hitbox(point: Point) -> Polygon:
-    b = point.bounds
-    new_b = (b[0] - HITBOX_SIZE, b[1] - HITBOX_SIZE,
-             b[2] + HITBOX_SIZE, b[3] + HITBOX_SIZE)
-    return box(*new_b)
 
 
 class Counter:
@@ -94,17 +93,15 @@ class Counter:
 
 class UI:
 
-    def __init__(self, network) -> None:
+    def __init__(self, network: "Network") -> None:
         self.network = network
         self.counter = Counter()
         self.fig = Figure()
         self.ax = self.fig.add_subplot()
         self.ax.set_xlim(*DEFAULT_XLIM)
         self.ax.set_ylim(*DEFAULT_YLIM)
-        self.base_scale = 1.1
         self.root = tk.Tk()
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
-        self.canvas.draw()
 
         self.plotted_lines = {}
         self.plotted_points = {}  # All points except calculation points
@@ -115,10 +112,10 @@ class UI:
 
         exit_button = tk.Button(
             self.root, command=self.root.destroy, text="Exit")
+        exit_button.pack()
+
         print_roads_button = tk.Button(
             self.root, command=self.print_all_roads, text="All Roads")
-
-        exit_button.pack()
         print_roads_button.pack()
 
         x_coord_label = tk.Label(self.root, text="X-coordinate")
@@ -136,7 +133,8 @@ class UI:
 
         self.show_hitboxes = tk.IntVar(value=1)
         toggle_hitboxes = tk.Checkbutton(
-            self.root, text="Show boxes around points", variable=self.show_hitboxes, onvalue=1, offvalue=0, command=self.redraw)
+            self.root, text="Show boxes around points",
+            variable=self.show_hitboxes, onvalue=1, offvalue=0, command=self.redraw)
         toggle_hitboxes.pack()
 
         reset_zoom_button = tk.Button(
@@ -153,6 +151,8 @@ class UI:
         self.canvas.mpl_connect('key_press_event', self.onkey)
         self.canvas.mpl_connect('scroll_event', self.zoom)
 
+        self.canvas.draw()
+
     def print_all_roads(self):
         print(self.network.roads)
 
@@ -160,7 +160,7 @@ class UI:
         point = Point(self.x_coord_entry.get(), self.y_coord_entry.get())
         self.x_coord_entry.delete(0, tk.END)
         self.y_coord_entry.delete(0, tk.END)
-        self.network.add_point_to_road(point)
+        self.network.add_point(point)
 
         self.redraw()
 
@@ -175,6 +175,18 @@ class UI:
         # Close button to destroy the pop-up window
         close_button = tk.Button(popup, text="Close", command=popup.destroy)
         close_button.pack()
+
+    def create_cursor(self):
+        """Needs to be recreated every time new data is added?"""
+        def joku(sel):
+            if NO_CURSOR:
+                sel.annotation.set_text("")
+            else:
+                sel.annotation.set_text(sel.artist)
+
+        cursor = mplcursors.cursor(hover=True)
+        cursor.connect(
+            "add", lambda sel: joku(sel))
 
     def redraw(self):
         if self.show_hitboxes.get() == 0:
@@ -353,7 +365,7 @@ class UI:
                 return
             self.reset_plotted_point_colors()
             point = Point(event.xdata, event.ydata)
-            output = self.network.add_point_to_road(point)
+            output = self.network.add_point(point)
             if output and output[1] is True:
                 self.plotted_points[output[0]].set_color(
                     SELECTED_P_COLOR)
@@ -366,6 +378,8 @@ class UI:
             print("Invalid input!")
 
         self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
+        if not NO_CURSOR:
+            self.create_cursor()
 
     def zoom(self, event):
         # get the current x and y limits
