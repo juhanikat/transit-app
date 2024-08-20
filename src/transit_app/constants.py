@@ -13,6 +13,10 @@ MIN_DISTANCE_WHEN_PLACING_POINT = 0.5
 # how far away any road needs to be from any point (that is not a coordinate of that road)
 MIN_DISTANCE_BETWEEN_POINT_AND_ROAD = 0.2
 
+# minimum distance between two calculation points
+# 0.1 throws an error when both calculation points are placed on a road ending point, not sure why
+MIN_DISTANCE_BETWEEN_C_POINTS = 0.2
+
 DEFAULT_XLIM = (0, 10)
 DEFAULT_YLIM = (0, 10)
 # how much to zoom in/out
