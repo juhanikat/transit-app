@@ -7,7 +7,7 @@
 3. Unzip the folder somewhere on your computer
 4. Open terminal and navigate to the program folder (`cd location-of-the-folder`)
 5. Enter `poetry install` if this is your first time using the program
-6. Enter `poetry run python src/main.py`
+6. Enter `poetry run python main.py`
 7. Done!
 
 # How to use
