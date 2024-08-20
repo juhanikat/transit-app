@@ -11,10 +11,10 @@ from matplotlib.figure import Figure
 from shapely import get_coordinates
 from shapely.geometry import Point
 
-from constants.constants import (CALCULATION_P_COLOR, DEFAULT_XLIM,
-                                 DEFAULT_YLIM, HOW_TO_USE_TEXT, NORMAL_P_COLOR,
-                                 SELECTED_P_COLOR, ZOOM_AMOUNT)
-from utilities import create_hitbox
+from .constants import (CALCULATION_P_COLOR, DEFAULT_XLIM, DEFAULT_YLIM,
+                        HOW_TO_USE_TEXT, NORMAL_P_COLOR, SELECTED_P_COLOR,
+                        ZOOM_AMOUNT)
+from .utilities import create_hitbox
 
 """
 root = tkinter.Tk()

@@ -2,13 +2,13 @@ import unittest
 
 from shapely import LineString, Point
 
-from network import network
+from src.transit_app.network import Network
 
 
 class TestNetwork(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.network = network.Network()
+        self.network = Network()
 
     def test_creating_roads(self):
         point1 = Point(0, 0)

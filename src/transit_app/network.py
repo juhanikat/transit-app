@@ -5,12 +5,13 @@ from shapely.geometry import LineString, MultiLineString, Point
 from shapely.geometry.multipoint import MultiPoint
 from shapely.ops import nearest_points, split
 
-from algorithms.algorithms import DFS, Dijkstra
-from utils.utilities import create_hitbox
+from .algorithms import DFS, Dijkstra
+from .constants import (CALCULATION_P_DISTANCE,
+                        MIN_DISTANCE_BETWEEN_POINT_AND_ROAD,
+                        MIN_DISTANCE_WHEN_PLACING_POINT)
+from .utilities import create_hitbox
 
-from ..utils.constants import (CALCULATION_P_DISTANCE,
-                               MIN_DISTANCE_BETWEEN_POINT_AND_ROAD,
-                               MIN_DISTANCE_WHEN_PLACING_POINT)
+print(__name__)
 
 
 class Network:
