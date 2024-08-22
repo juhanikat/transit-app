@@ -1,1 +1,6 @@
 .venv
+.vscode
+.github
+.pytest_cache
+poetry.lock
+__pycache__/

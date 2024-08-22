@@ -1,0 +1,5 @@
+[MAIN]
+ignore=src/tests
+
+[MESSAGES CONTROL]
+disable=missing-module-docstring, missing-class-docstring
