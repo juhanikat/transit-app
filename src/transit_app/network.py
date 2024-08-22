@@ -32,10 +32,12 @@ class Network:
         # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
         self.calculation_points = {}
         self.highlighted_path = None
+        self.shortest_path_info = None  # (Points list, distance) pair
 
     def find_shortest_path(self, point1: Point, point2: Point):
         """Finds the shortest path between point1 and point2 along a road. Uses Dijkstra's algorithm.
-        Returns the points that make up the path, and the distance from start point to end point."""
+        If a path can be found, returns the points that make up the path, and the distance from start point to end point.
+        Returns False otherwise."""
 
         if not self.connected(point1, point2):
             print("POINT1 AND POINT2 ARE NOT CONNECTED")
@@ -249,22 +251,8 @@ class Network:
                     print(
                         f"Connected: {self.connected(self.calculation_points[0][0], self.calculation_points[1][0])}")
                     """
-                    shortest_path = self.find_shortest_path(
+                    self.shortest_path_info = self.find_shortest_path(
                         self.calculation_points[0][0], self.calculation_points[1][0])
-                    if shortest_path:
-                        print(
-                            f"Distance from point 1 to point 2: {shortest_path[1]}")
-                        print(
-                            "Points that the route goes through: ")
-                        for index, point in enumerate(shortest_path[0]):
-                            if index == 0:
-                                print(f"START {point}")
-                            elif index == len(shortest_path[0]) - 1:
-                                print(f"END {point}")
-                            else:
-                                print(f"{index}: {point}")
-                    else:
-                        print("No path between calculation points!")
                 return True
 
         return False

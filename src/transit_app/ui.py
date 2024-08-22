@@ -68,7 +68,7 @@ canvas.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True)
 tkinter.mainloop()
 """
 if typing.TYPE_CHECKING:
-    from network.network import Network
+    from .network import Network
 
 
 NO_CURSOR = False  # No yellow boxes
@@ -110,20 +110,32 @@ class UI:
         self.plotted_hitboxes = {}
         self.plotted_highlighted_path = None
 
+        rows = 3
+        columns = 2
+        for i in range(rows):
+            self.root.grid_rowconfigure(i, weight=1, uniform="row")
+        for j in range(columns):
+            self.root.grid_columnconfigure(j, weight=1, uniform="row")
+
+        # Frame 1
+        frame_1 = tk.Frame(
+            self.root, highlightbackground="black", highlightthickness=1)
+        frame_1.grid(row=0, column=0, sticky="nsew")
+
         exit_button = tk.Button(
-            self.root, command=self.root.destroy, text="Exit")
+            frame_1, command=self.root.destroy, text="Exit")
         exit_button.pack()
 
         print_roads_button = tk.Button(
-            self.root, command=self.print_all_roads, text="All Roads")
+            frame_1, command=self.print_all_roads, text="All Roads")
         print_roads_button.pack()
 
-        x_coord_label = tk.Label(self.root, text="X-coordinate")
-        self.x_coord_entry = tk.Entry(self.root)
-        y_coord_label = tk.Label(self.root, text="Y-coordinate")
-        self.y_coord_entry = tk.Entry(self.root)
+        x_coord_label = tk.Label(frame_1, text="X-coordinate")
+        self.x_coord_entry = tk.Entry(frame_1)
+        y_coord_label = tk.Label(frame_1, text="Y-coordinate")
+        self.y_coord_entry = tk.Entry(frame_1)
         add_point_button = tk.Button(
-            self.root, command=self.handle_add_point, text="Add Point")
+            frame_1, command=self.handle_add_point, text="Add Point")
 
         x_coord_label.pack()
         self.x_coord_entry.pack()
@@ -133,19 +145,30 @@ class UI:
 
         self.show_hitboxes = tk.IntVar(value=1)
         toggle_hitboxes = tk.Checkbutton(
-            self.root, text="Show boxes around points",
+            frame_1, text="Show boxes around points",
             variable=self.show_hitboxes, onvalue=1, offvalue=0, command=self.redraw)
         toggle_hitboxes.pack()
 
         reset_zoom_button = tk.Button(
-            self.root, text="Reset zoom and panning", command=self.reset_zoom_and_panning)
+            frame_1, text="Reset zoom and panning", command=self.reset_zoom_and_panning)
         reset_zoom_button.pack()
 
         how_to_use_button = tk.Button(
-            self.root, text="How to Use", command=self.handle_how_to_use)
+            frame_1, text="How to Use", command=self.handle_how_to_use)
         how_to_use_button.pack()
 
-        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        # Frame 2
+        frame_2 = tk.Frame(
+            self.root, highlightbackground="black", highlightthickness=1)
+        frame_2.grid(row=0, column=1, sticky="nsew")
+
+        self.info_text = tk.Text(frame_2)
+        self.info_text.pack()
+
+        self.add_info_text("Start drawing!")
+
+        self.canvas.get_tk_widget().grid(row=1, column=0, rowspan=2,
+                                         columnspan=2, sticky="nsew")
 
         self.canvas.mpl_connect('button_press_event', self.onclick)
         self.canvas.mpl_connect('key_press_event', self.onkey)
@@ -176,6 +199,16 @@ class UI:
         close_button = tk.Button(popup, text="Close", command=popup.destroy)
         close_button.pack()
 
+    def clear_info_text(self):
+        self.info_text.config(state="normal")
+        self.info_text.delete(1.0, tk.END)
+        self.info_text.config(state="disabled")
+
+    def add_info_text(self, text: str):
+        self.info_text.config(state="normal")
+        self.info_text.insert(tk.END, f"\n\n{text}")
+        self.info_text.config(state="disabled")
+
     def create_cursor(self):
         """Needs to be recreated every time new data is added?"""
         def joku(sel):
@@ -189,6 +222,22 @@ class UI:
             "add", lambda sel: joku(sel))
 
     def redraw(self):
+        if self.network.shortest_path_info:
+            new_text = f"Shortest path length: {self.network.shortest_path_info[1]}"
+            points = self.network.shortest_path_info[0]
+            new_text += "\nPoints that the path goes through:"
+            for i, point in enumerate(points):
+                if i == 0:
+                    new_text += f"\nSTART {point}"
+                elif i == len(points) - 1:
+                    new_text += f"\nEND {point}"
+                else:
+                    new_text += f"\n{point}"
+            self.add_info_text(new_text)
+
+        elif self.network.shortest_path_info == False:
+            self.add_info_text("No path can be made!")
+
         if self.show_hitboxes.get() == 0:
             for point in list(self.plotted_points.keys()):
                 self.remove_plotted_hitbox(point)
