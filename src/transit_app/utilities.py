@@ -1,6 +1,56 @@
+from dataclasses import dataclass, field
+
 from shapely import LineString, Point, Polygon, box, equals, snap
 
 from .constants import HITBOX_SIZE, MIN_DISTANCE_WHEN_PLACING_POINT
+
+
+@dataclass
+class ShortestPathOutput:
+    error: str = ""
+    points: list[Point] = field(default_factory=list)
+    end_distance: float = 0
+
+    def __str__(self) -> str:
+        if len(self.error) > 0:
+            return self.error
+        new_text = f"Shortest path length: {self.end_distance}"
+        points = self.points
+        new_text += "\nPoints that the path goes through:"
+        for i, point in enumerate(points):
+            if i == 0:
+                new_text += f"\nSTART {point}"
+            elif i == len(points) - 1:
+                new_text += f"\nEND {point}"
+            else:
+                new_text += f"\n{point}"
+        return new_text
+
+
+@dataclass
+class AddPointOutput:
+    error: str = ""
+    point: Point = None
+    point_overlaps: bool = False
+
+    def __str__(self) -> str:
+        if len(self.error) > 0:
+            return self.error
+        if self.point_overlaps:
+            return f"Used existing point: {self.point}"
+        return f"Added new point: {self.point}"
+
+
+@dataclass
+class AddRoadOutput:
+    error: str = ""
+    road: LineString = None
+    all_roads: list[LineString] = field(default_factory=list)
+
+    def __str__(self) -> str:
+        if len(self.error) > 0:
+            return self.error
+        return f"Added new road: {self.road}\n{len(self.all_roads)} roads in total"
 
 
 def create_hitbox(point: Point) -> Polygon:

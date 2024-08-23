@@ -8,7 +8,8 @@ from shapely.ops import nearest_points, split
 from .algorithms import DFS, Dijkstra
 from .constants import (CALCULATION_P_DISTANCE, MIN_DISTANCE_BETWEEN_C_POINTS,
                         MIN_DISTANCE_BETWEEN_POINT_AND_ROAD)
-from .utilities import (create_hitbox, find_and_move_road,
+from .utilities import (AddPointOutput, AddRoadOutput, ShortestPathOutput,
+                        create_hitbox, find_and_move_road,
                         find_road_that_has_point, invalid_point_placement,
                         point_ends_road, point_near_point, shared_coords)
 
@@ -32,7 +33,10 @@ class Network:
         # 0: (Point, distance to point on linestring, road that point is on) and 1: (same stuff)
         self.calculation_points = {}
         self.highlighted_path = None
-        self.shortest_path_info = None  # (Points list, distance) pair
+
+        self.shortest_path_output = None
+        self.add_point_output = None
+        self._add_road_output = None
 
     def find_shortest_path(self, point1: Point, point2: Point):
         """Finds the shortest path between point1 and point2 along a road. Uses Dijkstra's algorithm.
@@ -40,8 +44,9 @@ class Network:
         Returns False otherwise."""
 
         if not self.connected(point1, point2):
-            print("POINT1 AND POINT2 ARE NOT CONNECTED")
-            return False
+            self.shortest_path_output = ShortestPathOutput(
+                error="POINT1 AND POINT2 ARE NOT CONNECTED")
+            return self.shortest_path_output
 
         start_time1 = time.time()
         d = Dijkstra()
@@ -100,8 +105,10 @@ class Network:
         self.highlighted_path = MultiLineString([points])
 
         end_time2 = time.time()
+        self.shortest_path_output = ShortestPathOutput(
+            points=points, end_distance=end_distance)
         print(f"TIME FOR FIND_SHORTEST_PATH 2: {end_time2 - start_time2}")
-        return (points, end_distance)
+        return self.shortest_path_output
 
     def connected(self, point1: Point, point2: Point):
         """Returns True if <point1> and <point2> are connected by roads, or False otherwise."""
@@ -133,7 +140,6 @@ class Network:
         """Splits road in segments based in the points in <split_points>. 
         These points must be on the road. Deletes the old road and returns new roads."""
         new_roads = []
-        print(len(split_points))
         if len(split_points) == 0:
             print("Empty split points list!")
             return
@@ -230,6 +236,7 @@ class Network:
                 nearest_on_road = nearest_points(point, road)[1]
                 point = snap(point, nearest_on_road,
                              tolerance=CALCULATION_P_DISTANCE)
+
                 # if calculation point is close enough to any road to snap to it
                 if len(self.calculation_points) == 0:
                     calculation_point = (
@@ -241,17 +248,18 @@ class Network:
                         point, road.project(point), road)
                     self.calculation_points[1] = calculation_point
 
+                    """
                     print(
                         f"CALCULATION POINT 1: {self.calculation_points[0][0]}")
                     print(
                         f"CALCULATION POINT 2: {self.calculation_points[1][0]}")
-                    """
+
                     print(
                         f"Distance between the two points: {abs(self.calculation_points[1][1] - self.calculation_points[0][1])}")
                     print(
                         f"Connected: {self.connected(self.calculation_points[0][0], self.calculation_points[1][0])}")
                     """
-                    self.shortest_path_info = self.find_shortest_path(
+                    self.find_shortest_path(
                         self.calculation_points[0][0], self.calculation_points[1][0])
                 return True
 
@@ -296,9 +304,10 @@ class Network:
         if not overlapping_point:
             if invalid_point_placement(point, self.points, self.roads):
                 # if point is near another point or road, new road is cancelled
-                print("INVALID POINT PLACEMENT")
+                self.add_point_output = AddPointOutput(
+                    error="Point is too close to another point or road!")
                 self.clear_temp()
-                return False
+                return self.add_point_output
             self.temp_points.append(point)
             self.temp_hitboxes[point] = create_hitbox(point)
         else:
@@ -310,13 +319,17 @@ class Network:
             elif equals(point, self.current_road_points[0]):
                 # if start and end are the same point, new road is cancelled
                 self.clear_temp()
-                return False
+                self.add_point_output = AddPointOutput(
+                    error="Start and end point cannot be the same point!")
+                return self.add_point_output
 
         self.current_road_points.append(point)
         if len(self.current_road_points) == 2:
             self._add_road(self.current_road_points)
 
-        return (point, point_overlaps)
+        self.add_point_output = AddPointOutput(
+            point=point, point_overlaps=point_overlaps)
+        return self.add_point_output
 
     def _add_road(self, added: list | LineString, check_crossroads=True):
         """Checks that given road can be created, and creates it if so. <added> can be a list of shapely.Point objects or a LineString.
@@ -332,24 +345,27 @@ class Network:
 
         for road in self.roads:
             if equals(road, new_road):
-                print("CANT ADD ROAD, IT IS EQUAL TO ANOTHER ROAD")
                 self.clear_temp()
-                return False
+                self._add_road_output = AddRoadOutput(
+                    error=f"Road is equal to another road!")
+                return self._add_road_output
 
         for point in self.points:
             if point.dwithin(new_road, MIN_DISTANCE_BETWEEN_POINT_AND_ROAD) and \
                     not shared_coords(point, new_road):
-                print("EXISTING POINT TOO CLOSE TO NEW ROAD")
                 self.clear_temp()
-                return False
+                self._add_road_output = AddRoadOutput(
+                    error=f"The road is too close to an existing point!")
+                return self._add_road_output
 
         self.temp_roads.append(new_road)
         if check_crossroads:
             crossroads = self.create_crossroads()
             if crossroads is False:
                 self.clear_temp()
-                print(f"Crossroads was False, can't create road {new_road}")
-                return False
+                self._add_road_output = AddRoadOutput(
+                    error=f"Can't create road because crossroads cannot be made here!")
+                return self._add_road_output
 
         for point in self.temp_points:
             self.points.append(point)
@@ -358,6 +374,5 @@ class Network:
         for road in self.temp_roads:
             self.roads.append(road)
         self.clear_temp()
-        print(f"Added road: {new_road}")
-        print(f"Amount of roads: {len(self.roads)}")
-        return new_road
+        self._add_road_output = AddRoadOutput(road=road, all_roads=self.roads)
+        return self._add_road_output
