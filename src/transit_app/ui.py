@@ -14,61 +14,11 @@ from shapely.geometry import Point
 from .constants import (CALCULATION_P_COLOR, DEFAULT_XLIM, DEFAULT_YLIM,
                         HOW_TO_USE_TEXT, NORMAL_P_COLOR, SELECTED_P_COLOR,
                         ZOOM_AMOUNT)
-from .utilities import create_hitbox
+from .utilities import (AddPointOutput, AddRoadOutput, ShortestPathOutput,
+                        create_hitbox)
 
-"""
-root = tkinter.Tk()
-root.wm_title("Embedding in Tk")
-
-fig = Figure(figsize=(5, 4), dpi=100)
-t = np.arange(0, 3, .01)
-ax = fig.add_subplot()
-line, = ax.plot(t, 2 * np.sin(2 * np.pi * t))
-ax.set_xlabel("time [s]")
-ax.set_ylabel("f(t)")
-
-canvas = FigureCanvasTkAgg(fig, master=root)  # A tk.DrawingArea.
-canvas.draw()
-
-# pack_toolbar=False will make it easier to use a layout manager later on.
-toolbar = NavigationToolbar2Tk(canvas, root, pack_toolbar=False)
-toolbar.update()
-
-canvas.mpl_connect(
-    "key_press_event", lambda event: print(f"you pressed {event.key}"))
-canvas.mpl_connect("key_press_event", key_press_handler)
-
-button_quit = tkinter.Button(master=root, text="Quit", command=root.destroy)
-
-
-def update_frequency(new_val):
-    # retrieve frequency
-    f = float(new_val)
-
-    # update data
-    y = 2 * np.sin(2 * np.pi * f * t)
-    line.set_data(t, y)
-
-    # required to update canvas and attached toolbar!
-    canvas.draw()
-
-
-slider_update = tkinter.Scale(root, from_=1, to=5, orient=tkinter.HORIZONTAL,
-                              command=update_frequency, label="Frequency [Hz]")
-
-# Packing order is important. Widgets are processed sequentially and if there
-# is no space left, because the window is too small, they are not displayed.
-# The canvas is rather flexible in its size, so we pack it last which makes
-# sure the UI controls are displayed as long as possible.
-button_quit.pack(side=tkinter.BOTTOM)
-slider_update.pack(side=tkinter.BOTTOM)
-toolbar.pack(side=tkinter.BOTTOM, fill=tkinter.X)
-canvas.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True)
-
-tkinter.mainloop()
-"""
 if typing.TYPE_CHECKING:
-    from network.network import Network
+    from .network import Network
 
 
 NO_CURSOR = False  # No yellow boxes
@@ -110,54 +60,31 @@ class UI:
         self.plotted_hitboxes = {}
         self.plotted_highlighted_path = None
 
-        exit_button = tk.Button(
-            self.root, command=self.root.destroy, text="Exit")
-        exit_button.pack()
+        self.printed_shortest_path_output: ShortestPathOutput = None
+        self.printed_add_point_output: AddPointOutput = None
+        self.printed_add_road_output: AddRoadOutput = None
 
-        print_roads_button = tk.Button(
-            self.root, command=self.print_all_roads, text="All Roads")
-        print_roads_button.pack()
-
-        x_coord_label = tk.Label(self.root, text="X-coordinate")
-        self.x_coord_entry = tk.Entry(self.root)
-        y_coord_label = tk.Label(self.root, text="Y-coordinate")
-        self.y_coord_entry = tk.Entry(self.root)
-        add_point_button = tk.Button(
-            self.root, command=self.handle_add_point, text="Add Point")
-
-        x_coord_label.pack()
-        self.x_coord_entry.pack()
-        y_coord_label.pack()
-        self.y_coord_entry.pack()
-        add_point_button.pack()
-
-        self.show_hitboxes = tk.IntVar(value=1)
-        toggle_hitboxes = tk.Checkbutton(
-            self.root, text="Show boxes around points",
-            variable=self.show_hitboxes, onvalue=1, offvalue=0, command=self.redraw)
-        toggle_hitboxes.pack()
-
-        reset_zoom_button = tk.Button(
-            self.root, text="Reset zoom and panning", command=self.reset_zoom_and_panning)
-        reset_zoom_button.pack()
-
-        how_to_use_button = tk.Button(
-            self.root, text="How to Use", command=self.handle_how_to_use)
-        how_to_use_button.pack()
-
-        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+        self.build_ui_elements()
 
         self.canvas.mpl_connect('button_press_event', self.onclick)
         self.canvas.mpl_connect('key_press_event', self.onkey)
         self.canvas.mpl_connect('scroll_event', self.zoom)
 
+        self.add_info_text("Start drawing!")
         self.canvas.draw()
 
     def print_all_roads(self):
-        print(self.network.roads)
+        new_text = f"All Roads ({len(self.network.roads)} in total):"
+        for road in self.network.roads:
+            new_text += f"\n{road}"
+        self.add_info_text(new_text)
 
     def handle_add_point(self):
-        point = Point(self.x_coord_entry.get(), self.y_coord_entry.get())
+        x_coord = self.x_coord_entry.get()
+        y_coord = self.y_coord_entry.get()
+        if x_coord == "" or y_coord == "":
+            return
+        point = Point(x_coord, y_coord)
         self.x_coord_entry.delete(0, tk.END)
         self.y_coord_entry.delete(0, tk.END)
         self.network.add_point(point)
@@ -176,6 +103,17 @@ class UI:
         close_button = tk.Button(popup, text="Close", command=popup.destroy)
         close_button.pack()
 
+    def clear_info_text(self):
+        self.info_text.config(state="normal")
+        self.info_text.delete(1.0, tk.END)
+        self.info_text.config(state="disabled")
+
+    def add_info_text(self, text: str):
+        self.info_text.config(state="normal")
+        self.info_text.insert(tk.END, f"\n\n{text}")
+        self.info_text.see(tk.END)
+        self.info_text.config(state="disabled")
+
     def create_cursor(self):
         """Needs to be recreated every time new data is added?"""
         def joku(sel):
@@ -189,6 +127,24 @@ class UI:
             "add", lambda sel: joku(sel))
 
     def redraw(self):
+        if self.network.shortest_path_output:
+            if self.printed_shortest_path_output != self.network.shortest_path_output:
+                self.printed_shortest_path_output = self.network.shortest_path_output
+                self.add_info_text(self.printed_shortest_path_output)
+
+        if self.network.add_point_output:
+            if self.printed_add_point_output != self.network.add_point_output:
+                self.printed_add_point_output = self.network.add_point_output
+                if self.printed_add_point_output.point_overlaps:
+                    self.plotted_points[self.printed_add_point_output.point].set_color(
+                        SELECTED_P_COLOR)
+                # self.add_info_text(self.printed_add_point_output)
+
+        if self.network._add_road_output:
+            if self.printed_add_road_output != self.network._add_road_output:
+                self.printed_add_road_output = self.network._add_road_output
+                self.add_info_text(self.printed_add_road_output)
+
         if self.show_hitboxes.get() == 0:
             for point in list(self.plotted_points.keys()):
                 self.remove_plotted_hitbox(point)
@@ -365,10 +321,7 @@ class UI:
                 return
             self.reset_plotted_point_colors()
             point = Point(event.xdata, event.ydata)
-            output = self.network.add_point(point)
-            if output and output[1] is True:
-                self.plotted_points[output[0]].set_color(
-                    SELECTED_P_COLOR)
+            self.network.add_point(point)
         elif event.button == MouseButton.MIDDLE:
             if event.xdata is None or event.ydata is None:
                 return
@@ -405,6 +358,65 @@ class UI:
         self.ax.set_xlim(*DEFAULT_XLIM)
         self.ax.set_ylim(*DEFAULT_YLIM)
         self.redraw()  # force re-draw
+
+    def build_ui_elements(self):
+        rows = 3
+        columns = 2
+        for i in range(rows):
+            self.root.grid_rowconfigure(i, weight=1, uniform="row")
+        for j in range(columns):
+            self.root.grid_columnconfigure(j, weight=1, uniform="row")
+
+        # Frame 1
+        frame_1 = tk.Frame(
+            self.root, highlightbackground="black", highlightthickness=1)
+        frame_1.grid(row=0, column=0, sticky="nsew")
+
+        exit_button = tk.Button(
+            frame_1, command=self.root.destroy, text="Exit")
+        exit_button.pack()
+
+        print_roads_button = tk.Button(
+            frame_1, command=self.print_all_roads, text="All Roads")
+        print_roads_button.pack()
+
+        x_coord_label = tk.Label(frame_1, text="X-coordinate")
+        self.x_coord_entry = tk.Entry(frame_1)
+        y_coord_label = tk.Label(frame_1, text="Y-coordinate")
+        self.y_coord_entry = tk.Entry(frame_1)
+        add_point_button = tk.Button(
+            frame_1, command=self.handle_add_point, text="Add Point")
+
+        x_coord_label.pack()
+        self.x_coord_entry.pack()
+        y_coord_label.pack()
+        self.y_coord_entry.pack()
+        add_point_button.pack()
+
+        self.show_hitboxes = tk.IntVar(value=1)
+        toggle_hitboxes = tk.Checkbutton(
+            frame_1, text="Show boxes around points",
+            variable=self.show_hitboxes, onvalue=1, offvalue=0, command=self.redraw)
+        toggle_hitboxes.pack()
+
+        reset_zoom_button = tk.Button(
+            frame_1, text="Reset zoom and panning", command=self.reset_zoom_and_panning)
+        reset_zoom_button.pack()
+
+        how_to_use_button = tk.Button(
+            frame_1, text="How to Use", command=self.handle_how_to_use)
+        how_to_use_button.pack()
+
+        # Frame 2
+        frame_2 = tk.Frame(
+            self.root, highlightbackground="black", highlightthickness=1)
+        frame_2.grid(row=0, column=1, sticky="nsew")
+
+        self.info_text = tk.Text(frame_2)
+        self.info_text.pack()
+
+        self.canvas.get_tk_widget().grid(row=1, column=0, rowspan=2,
+                                         columnspan=2, sticky="nsew")
 
     def start_ui(self):
         self.root.mainloop()

@@ -55,9 +55,9 @@ class TestNetwork(unittest.TestCase):
 
         c_point1 = Point(0, 0)
         c_point2 = Point(1, 1)
-        points, distance = self.network.find_shortest_path(c_point1, c_point2)
-        self.assertEqual(points, [point1.coords[0], point2.coords[0]])
-        self.assertAlmostEqual(distance, 1.414, 3)
+        output = self.network.find_shortest_path(c_point1, c_point2)
+        self.assertEqual(output.points, [point1.coords[0], point2.coords[0]])
+        self.assertAlmostEqual(output.end_distance, 1.414, 3)
 
     def test_calculating_shortest_path_2(self):
         point1 = Point(0, 0)
@@ -72,10 +72,10 @@ class TestNetwork(unittest.TestCase):
 
         c_point1 = Point(0, 0)
         c_point2 = Point(3, 3)
-        points, distance = self.network.find_shortest_path(c_point1, c_point2)
+        output = self.network.find_shortest_path(c_point1, c_point2)
         self.assertEqual(
-            points, [point1.coords[0], point2.coords[0], c_point2.coords[0]])
-        self.assertAlmostEqual(distance, 1.414*3, 2)
+            output.points, [point1.coords[0], point2.coords[0], c_point2.coords[0]])
+        self.assertAlmostEqual(output.end_distance, 1.414*3, 2)
 
     def test_crossroads(self):
         point1 = Point(0, 1)
