@@ -53,6 +53,33 @@ class AddRoadOutput:
         return f"Added new road: {self.road}\n{len(self.all_roads)} roads in total"
 
 
+@dataclass
+class AddCalculationPointOutput:
+    error: str = ""
+    c_point_added: bool = False
+
+    def __str__(self) -> str:
+        if len(self.error) > 0:
+            return self.error
+        return ""
+
+
+@dataclass
+class CreateCrossroadsOutput:
+    error: str = ""
+    new_crossroads: list[Point] = field(default_factory=list)
+
+    def __str__(self) -> str:
+        if len(self.error) > 0:
+            return self.error
+        if len(self.new_crossroads) == 0:
+            return "No new crossroads"
+        new_text = f"New crossroads ({len(self.new_crossroads)} in total): "
+        for crossroad in self.new_crossroads:
+            new_text += f"\n{crossroad}"
+        return new_text
+
+
 def create_hitbox(point: Point) -> Polygon:
     """Creates a hitbox around a point. Used when the user wants to click the point."""
     b = point.bounds

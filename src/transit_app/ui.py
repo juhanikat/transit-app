@@ -14,8 +14,9 @@ from shapely.geometry import Point
 from .constants import (CALCULATION_P_COLOR, DEFAULT_XLIM, DEFAULT_YLIM,
                         HOW_TO_USE_TEXT, NORMAL_P_COLOR, SELECTED_P_COLOR,
                         ZOOM_AMOUNT)
-from .utilities import (AddPointOutput, AddRoadOutput, ShortestPathOutput,
-                        create_hitbox)
+from .utilities import (AddCalculationPointOutput, AddPointOutput,
+                        AddRoadOutput, CreateCrossroadsOutput,
+                        ShortestPathOutput, create_hitbox)
 
 if typing.TYPE_CHECKING:
     from .network import Network
@@ -63,6 +64,8 @@ class UI:
         self.printed_shortest_path_output: ShortestPathOutput = None
         self.printed_add_point_output: AddPointOutput = None
         self.printed_add_road_output: AddRoadOutput = None
+        self.printed_create_crossroads_output: CreateCrossroadsOutput = None
+        self.printed_add_calculation_point_output: AddCalculationPointOutput = None
 
         self.build_ui_elements()
 
@@ -110,7 +113,7 @@ class UI:
 
     def add_info_text(self, text: str):
         self.info_text.config(state="normal")
-        self.info_text.insert(tk.END, f"\n\n{text}")
+        self.info_text.insert(tk.END, f"\n{text}")
         self.info_text.see(tk.END)
         self.info_text.config(state="disabled")
 
@@ -128,22 +131,35 @@ class UI:
 
     def redraw(self):
         if self.network.shortest_path_output:
-            if self.printed_shortest_path_output != self.network.shortest_path_output:
+            if self.printed_shortest_path_output is not self.network.shortest_path_output:
                 self.printed_shortest_path_output = self.network.shortest_path_output
                 self.add_info_text(self.printed_shortest_path_output)
 
         if self.network.add_point_output:
-            if self.printed_add_point_output != self.network.add_point_output:
+            if self.printed_add_point_output is not self.network.add_point_output:
                 self.printed_add_point_output = self.network.add_point_output
                 if self.printed_add_point_output.point_overlaps:
                     self.plotted_points[self.printed_add_point_output.point].set_color(
                         SELECTED_P_COLOR)
                 # self.add_info_text(self.printed_add_point_output)
 
-        if self.network._add_road_output:
-            if self.printed_add_road_output != self.network._add_road_output:
-                self.printed_add_road_output = self.network._add_road_output
+        if self.network.add_road_output:
+            if self.printed_add_road_output is not self.network.add_road_output:
+                self.printed_add_road_output = self.network.add_road_output
                 self.add_info_text(self.printed_add_road_output)
+
+        if self.network.create_crossroads_output:
+            if self.printed_create_crossroads_output is not self.network.create_crossroads_output:
+                self.printed_create_crossroads_output = self.network.create_crossroads_output
+                self.add_info_text(self.printed_create_crossroads_output)
+
+        if self.network.add_calculation_point_output:
+            if self.printed_add_calculation_point_output is not self.network.add_calculation_point_output:
+                self.printed_add_calculation_point_output = self.network.add_calculation_point_output
+                if self.printed_add_calculation_point_output.error or \
+                        self.printed_add_calculation_point_output.c_point_added:
+                    self.add_info_text(
+                        self.printed_add_calculation_point_output)
 
         if self.show_hitboxes.get() == 0:
             for point in list(self.plotted_points.keys()):
