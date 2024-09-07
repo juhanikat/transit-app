@@ -2,6 +2,7 @@ import tkinter as tk
 import typing
 from enum import Enum
 
+import matplotlib.patheffects as pe
 import mplcursors
 # Implement the default Matplotlib key bindings.
 from matplotlib.backend_bases import MouseButton
@@ -12,8 +13,8 @@ from shapely import get_coordinates
 from shapely.geometry import Point
 
 from .constants import (CALCULATION_P_COLOR, DEFAULT_XLIM, DEFAULT_YLIM,
-                        HOW_TO_USE_TEXT, NORMAL_P_COLOR, SELECTED_P_COLOR,
-                        ZOOM_AMOUNT)
+                        HOW_TO_USE_TEXT, HPATH_COLOR, NORMAL_P_COLOR,
+                        ROAD_COLOR, ROAD_WIDTH, SELECTED_P_COLOR, ZOOM_AMOUNT)
 from .utilities import (AddCalculationPointOutput, AddPointOutput,
                         AddRoadOutput, CreateCrossroadsOutput,
                         ShortestPathOutput, create_hitbox)
@@ -73,7 +74,7 @@ class UI:
         self.canvas.mpl_connect('key_press_event', self.onkey)
         self.canvas.mpl_connect('scroll_event', self.zoom)
 
-        self.add_info_text("Start drawing!")
+        self.add_info_text("Start drawing!", sep=False)
         self.canvas.draw()
 
     def print_all_roads(self):
@@ -111,8 +112,10 @@ class UI:
         self.info_text.delete(1.0, tk.END)
         self.info_text.config(state="disabled")
 
-    def add_info_text(self, text: str):
+    def add_info_text(self, text: str, sep=True):
         self.info_text.config(state="normal")
+        if sep:
+            self.info_text.insert(tk.END, "\n-------------------")
         self.info_text.insert(tk.END, f"\n{text}")
         self.info_text.see(tk.END)
         self.info_text.config(state="disabled")
@@ -130,6 +133,13 @@ class UI:
             "add", lambda sel: joku(sel))
 
     def redraw(self):
+        self.longest_road_label.config(
+            text=f"Longest road length: {self.network.stats['longest_road_length']}")
+        self.shortest_road_label.config(
+            text=f"Shortest road length: {self.network.stats['shortest_road_length']}")
+        self.road_amount_label.config(
+            text=f"Road amount: {self.network.stats['road_amount']}")
+
         if self.network.shortest_path_output:
             if self.printed_shortest_path_output is not self.network.shortest_path_output:
                 self.printed_shortest_path_output = self.network.shortest_path_output
@@ -141,7 +151,8 @@ class UI:
                 if self.printed_add_point_output.point_overlaps:
                     self.plotted_points[self.printed_add_point_output.point].set_color(
                         SELECTED_P_COLOR)
-                # self.add_info_text(self.printed_add_point_output)
+                if self.printed_add_point_output.error:
+                    self.add_info_text(self.printed_add_point_output)
 
         if self.network.add_road_output:
             if self.printed_add_road_output is not self.network.add_road_output:
@@ -239,7 +250,7 @@ class UI:
             y = [coords[1]
                  for coords in get_coordinates(self.network.highlighted_path)]
             self.plotted_highlighted_path = self.ax.plot(
-                x, y, "b")[0]
+                x, y, linewidth=ROAD_WIDTH, color=HPATH_COLOR, zorder=0)[0]
 
         self.canvas.draw()
 
@@ -276,7 +287,10 @@ class UI:
 
     def plot_road(self, road):
         plotted_line = self.ax.plot(
-            road.xy[0], road.xy[1], label=f"Road {self.counter()}, length {road.length}")[0]
+            road.xy[0], road.xy[1], linewidth=ROAD_WIDTH, color=ROAD_COLOR,
+            path_effects=[
+                pe.Stroke(linewidth=5, foreground='black'), pe.Normal()],
+            zorder=0, label=f"Road {self.counter()}, length {road.length}")[0]
         self.plotted_lines[road] = plotted_line
 
     def plot_point(self, point, point_type: PointType):
@@ -422,6 +436,13 @@ class UI:
         how_to_use_button = tk.Button(
             frame_1, text="How to Use", command=self.handle_how_to_use)
         how_to_use_button.pack()
+
+        self.longest_road_label = tk.Label(frame_1, text="Longest road: ")
+        self.shortest_road_label = tk.Label(frame_1, text="Shortest road: ")
+        self.road_amount_label = tk.Label(frame_1, text="Road amount: ")
+        self.road_amount_label.pack()
+        self.longest_road_label.pack()
+        self.shortest_road_label.pack()
 
         # Frame 2
         frame_2 = tk.Frame(

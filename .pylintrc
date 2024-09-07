@@ -1,5 +1,5 @@
 [MAIN]
-ignore=src/tests
+ignore=src/tests, .*
 
 [MESSAGES CONTROL]
-disable=missing-module-docstring, missing-class-docstring
+disable=missing-module-docstring, missing-class-docstring, missing-function-docstring
