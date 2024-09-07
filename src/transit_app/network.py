@@ -323,7 +323,7 @@ class Network:
         overlapping_point: Point = self.check_point_overlap(point)
 
         if not overlapping_point:
-            if invalid_point_placement(point, self.points, self.roads):
+            if invalid_point_placement(point, self.points + self.temp_points, self.roads):
                 # if point is near another point or road, new road is cancelled
                 self.add_point_output = AddPointOutput(
                     error="Point is too close to another point or road!")

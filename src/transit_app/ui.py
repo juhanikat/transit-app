@@ -55,6 +55,8 @@ class UI:
         self.root = tk.Tk()
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
 
+        self.zoom_level = 0
+
         self.plotted_lines = {}
         self.plotted_points = {}  # All points except calculation points
         self.plotted_temp_points = {}  # Points for the currently building road
@@ -370,18 +372,26 @@ class UI:
         ylim = self.ax.get_ylim()
         if event.button == 'down':
             # zoom in
-            scale_factor = ZOOM_AMOUNT
+            if self.zoom_level == 3:
+                print("max zoom in")
+                return
+            self.zoom_level += 1
+            self.ax.set_xlim(xlim[0] + 1,
+                             xlim[1] - 1)
+            self.ax.set_ylim(ylim[0] + 1,
+                             ylim[1] - 1)
         elif event.button == 'up':
             # zoom out
-            scale_factor = -ZOOM_AMOUNT
-
+            if self.zoom_level == -10:
+                print("max zoom out")
+                return
+            self.zoom_level -= 1
+            self.ax.set_xlim(xlim[0] - 1,
+                             xlim[1] + 1)
+            self.ax.set_ylim(ylim[0] - 1,
+                             ylim[1] + 1)
         else:
             print("weird things with zoom!")
-        # set new limits
-        self.ax.set_xlim(xlim[0] - scale_factor,
-                         xlim[1] + scale_factor)
-        self.ax.set_ylim(ylim[0] - scale_factor,
-                         ylim[1] + scale_factor)
         self.redraw()  # force re-draw
 
     def reset_zoom_and_panning(self):

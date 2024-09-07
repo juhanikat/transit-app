@@ -24,7 +24,7 @@ MIN_DISTANCE_BETWEEN_C_POINTS = 0.2
 DEFAULT_XLIM = (0, 10)
 DEFAULT_YLIM = (0, 10)
 # how much to zoom in/out
-ZOOM_AMOUNT = 1
+ZOOM_AMOUNT = 2
 
 HOW_TO_USE_TEXT = """
 Start drawing a road by clicking anywhere on the map, then click somewhere else to finish the road. Note that you can not start or end a road right next to an existing one. \n
