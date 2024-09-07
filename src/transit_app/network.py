@@ -41,6 +41,17 @@ class Network:
         self.create_crossroads_output = None
         self.add_calculation_point_output = None
 
+        # used for statistics like shortest_road, longest_road etc.
+        self.stats = {"longest_road_length": None,
+                      "shortest_road_length": None, "road_amount": 0}
+
+    def update_stats(self):
+        self.stats["longest_road_length"] = max(
+            self.roads, key=lambda road: road.length).length
+        self.stats["shortest_road_length"] = min(
+            self.roads, key=lambda road: road.length).length
+        self.stats["road_amount"] = len(self.roads)
+
     def find_shortest_path(self, point1: Point, point2: Point):
         """Finds the shortest path between point1 and point2 along a road. Uses Dijkstra's algorithm.
         If a path can be found, returns a ShortestPathOutput object 
@@ -384,5 +395,6 @@ class Network:
         for road in self.temp_roads:
             self.roads.append(road)
         self.clear_temp()
+        self.update_stats()
         self.add_road_output = AddRoadOutput(road=road, all_roads=self.roads)
         return self.add_road_output

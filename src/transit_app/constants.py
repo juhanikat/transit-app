@@ -4,6 +4,10 @@ SELECTED_P_COLOR = "r"
 INTERSECTION_P_COLOR = "g"
 CALCULATION_P_COLOR = "c"
 
+ROAD_WIDTH = 4
+ROAD_COLOR = (0.6, 0.9, 0.65, 1)
+HPATH_COLOR = (0.4, 0.5, 0.95, 1)
+
 # how far away can you click from a road to create a calculation point there
 CALCULATION_P_DISTANCE = 0.2
 
