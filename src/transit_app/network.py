@@ -10,9 +10,10 @@ from .constants import (CALCULATION_P_DISTANCE, MIN_DISTANCE_BETWEEN_C_POINTS,
                         MIN_DISTANCE_BETWEEN_POINT_AND_ROAD)
 from .utilities import (AddCalculationPointOutput, AddPointOutput,
                         AddRoadOutput, CreateCrossroadsOutput,
-                        ShortestPathOutput, create_hitbox, find_and_move_road,
-                        find_road_that_has_point, invalid_point_placement,
-                        point_ends_road, point_near_point, shared_coords)
+                        ShortestPathOutput, ValidateRoadOutput, create_hitbox,
+                        find_and_move_road, find_road_that_has_point,
+                        invalid_point_placement, point_ends_road,
+                        point_near_point, shared_coords)
 
 
 class Network:
@@ -37,6 +38,7 @@ class Network:
 
         self.shortest_path_output = None
         self.add_point_output = None
+        self.validate_road_output = None
         self.add_road_output = None
         self.create_crossroads_output = None
         self.add_calculation_point_output = None
@@ -153,7 +155,7 @@ class Network:
 
     def split_road(self, road: LineString, split_points: list):
         """Splits road in segments based in the points in <split_points>. 
-        These points must be on the road. Deletes the old road and returns new roads."""
+        These points must be on the road."""
         new_roads = []
         if len(split_points) == 0:
             print("Empty split points list!")
@@ -179,17 +181,19 @@ class Network:
                 [split_points[-1].coords[0], road.coords[1]])
             new_roads.append(last_road)
 
+        delete_new_road = False
         if road in self.roads:
             self.roads.remove(road)
         else:
-            self.temp_roads.remove(road)
-        return new_roads
+            delete_new_road = True
+        return (new_roads, delete_new_road)
 
-    def create_crossroads(self):
+    def create_crossroads(self, new_road: LineString):
         """Checks points where two roads intersect and adds crossroads there. 
         Crossroad splits the existing roads."""
         new_crossroads = set()
-        used_roads = self.roads + self.temp_roads
+        remove_new_road = False
+        used_roads = self.roads + [new_road]
         updated = {road: [] for road in used_roads}  # road: crossroads pairs
         for road in used_roads:
             for other_road in used_roads:
@@ -227,17 +231,19 @@ class Network:
         for road in updated:
             if road not in used_roads or len(updated[road]) == 0:
                 continue
-            new_roads += self.split_road(road, updated[road])
+            split_roads, delete_new_road = self.split_road(road, updated[road])
+            new_roads += split_roads
+            remove_new_road = delete_new_road
 
         for crossroad in new_crossroads:
             self.points.append(crossroad)
             self.crossroads.add(crossroad)
             self.hitboxes[crossroad] = create_hitbox(crossroad)
         for road in new_roads:
-            self._add_road(road, check_crossroads=False)
+            self._add_road(road)
 
         self.create_crossroads_output = CreateCrossroadsOutput(
-            new_crossroads=new_crossroads)
+            new_crossroads=new_crossroads, remove_new_road=remove_new_road)
         return self.create_crossroads_output
 
     def add_calculation_point(self, point: Point):
@@ -352,7 +358,32 @@ class Network:
             point=point, point_overlaps=point_overlaps)
         return self.add_point_output
 
-    def _add_road(self, added: list | LineString, check_crossroads=True):
+    def validate_road(self, new_road: LineString):
+        road: LineString
+        for road in self.roads:
+            if equals(road, new_road):
+                self.validate_road_output = ValidateRoadOutput(
+                    error="Road is equal to another road!")
+                return self.validate_road_output
+
+        point: Point
+        for point in self.points:
+            if point.dwithin(new_road, MIN_DISTANCE_BETWEEN_POINT_AND_ROAD) and \
+                    not shared_coords(point, new_road):
+                self.validate_road_output = ValidateRoadOutput(
+                    error="The road is too close to an existing point!")
+                return self.validate_road_output
+
+        crossroads = self.create_crossroads(new_road)
+        if crossroads.error:
+            self.validate_road_output = ValidateRoadOutput(
+                error="Can't create road because crossroads cannot be made here!")
+            return self.validate_road_output
+
+        self.validate_road_output = ValidateRoadOutput(valid=True)
+        return self.validate_road_output
+
+    def _add_road(self, added: list | LineString):
         """Checks that given road can be created, and creates it if so. 
         <added> can be a list of shapely.Point objects or a LineString."""
         coords = []
@@ -364,37 +395,22 @@ class Network:
         else:
             new_road = added
 
-        for road in self.roads:
-            if equals(road, new_road):
-                self.clear_temp()
-                self.add_road_output = AddRoadOutput(
-                    error="Road is equal to another road!")
-                return self.add_road_output
-
-        for point in self.points:
-            if point.dwithin(new_road, MIN_DISTANCE_BETWEEN_POINT_AND_ROAD) and \
-                    not shared_coords(point, new_road):
-                self.clear_temp()
-                self.add_road_output = AddRoadOutput(
-                    error="The road is too close to an existing point!")
-                return self.add_road_output
-
-        self.temp_roads.append(new_road)
-        if check_crossroads:
-            crossroads = self.create_crossroads()
-            if crossroads.error:
-                self.clear_temp()
-                self.add_road_output = AddRoadOutput(
-                    error="Can't create road because crossroads cannot be made here!")
-                return self.add_road_output
+        self.validate_road(new_road)
+        if not self.validate_road_output.valid:
+            self.clear_temp()
+            self.add_road_output = AddRoadOutput(
+                error="Road validation failed!")
+            return self.add_road_output
 
         for point in self.temp_points:
             self.points.append(point)
         for point, hitbox in self.temp_hitboxes.items():
             self.hitboxes[point] = hitbox
-        for road in self.temp_roads:
-            self.roads.append(road)
+        if not self.create_crossroads_output.remove_new_road:
+            self.roads.append(new_road)
+
         self.clear_temp()
         self.update_stats()
-        self.add_road_output = AddRoadOutput(road=road, all_roads=self.roads)
+        self.add_road_output = AddRoadOutput(
+            road=new_road, all_roads=self.roads)
         return self.add_road_output

@@ -65,9 +65,21 @@ class AddCalculationPointOutput:
 
 
 @dataclass
+class ValidateRoadOutput:
+    error: str = ""
+    valid: bool = False
+
+    def __str__(self) -> str:
+        if len(self.error) > 0:
+            return self.error
+        return "no str yet for validateroadoutput"
+
+
+@dataclass
 class CreateCrossroadsOutput:
     error: str = ""
     new_crossroads: list[Point] = field(default_factory=list)
+    remove_new_road: bool = False
 
     def __str__(self) -> str:
         if len(self.error) > 0:
