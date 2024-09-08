@@ -14,7 +14,7 @@ from shapely.geometry import Point
 
 from .constants import (CALCULATION_P_COLOR, DEFAULT_XLIM, DEFAULT_YLIM,
                         HOW_TO_USE_TEXT, HPATH_COLOR, NORMAL_P_COLOR,
-                        ROAD_COLOR, ROAD_WIDTH, SELECTED_P_COLOR, ZOOM_AMOUNT)
+                        ROAD_COLOR, ROAD_WIDTH, SELECTED_P_COLOR)
 from .utilities import (AddCalculationPointOutput, AddPointOutput,
                         AddRoadOutput, CreateCrossroadsOutput,
                         ShortestPathOutput, create_hitbox)
@@ -134,6 +134,149 @@ class UI:
         cursor.connect(
             "add", lambda sel: joku(sel))
 
+    def reset_plotted_point_colors(self):
+        for plotted_point in self.plotted_points.values():
+            plotted_point.set_color(NORMAL_P_COLOR)
+
+    def remove_plotted_point(self, point, point_type: PointType):
+        match point_type:
+            case PointType.NORMAL:
+                point_storage = self.plotted_points
+            case PointType.SELECTED:
+                point_storage = self.plotted_points
+            case PointType.CALCULATION:
+                point_storage = self.plotted_calculation_points
+        if point not in point_storage:
+            print("POINT NOT IN PLOTTED_POINTS DICT KEYS!")
+            return
+        point_storage[point].remove()
+        del point_storage[point]
+
+    def remove_plotted_road(self, road):
+        if road not in self.plotted_lines.keys():
+            print("ROAD NOT IN PLOTTED_LINES DICT KEYS!")
+            return
+        self.plotted_lines[road].remove()
+        del self.plotted_lines[road]
+
+    def remove_plotted_hitbox(self, point: Point):
+        if point not in self.plotted_hitboxes.keys():
+            return
+        self.plotted_hitboxes[point].remove()
+        del self.plotted_hitboxes[point]
+
+    def plot_road(self, road):
+        plotted_line = self.ax.plot(
+            road.xy[0], road.xy[1], linewidth=ROAD_WIDTH, color=ROAD_COLOR,
+            path_effects=[
+                pe.Stroke(linewidth=5, foreground='black'), pe.Normal()],
+            zorder=0, label=f"Road {self.counter()}, length {road.length}")[0]
+        self.plotted_lines[road] = plotted_line
+
+    def plot_point(self, point, point_type: PointType):
+        color = None
+        point_storage = self.plotted_points
+        match point_type:
+            case PointType.NORMAL:
+                color = NORMAL_P_COLOR
+            case PointType.SELECTED:
+                color = SELECTED_P_COLOR
+            case PointType.CALCULATION:
+                color = CALCULATION_P_COLOR
+                point_storage = self.plotted_calculation_points
+        plotted_point = self.ax.plot(
+            *point.xy, f"{color}o")[0]
+        point_storage[point] = plotted_point
+
+    def plot_hitbox(self, point):
+        plotted_hitbox = self.ax.plot(*create_hitbox(point).exterior.xy)[0]
+        self.plotted_hitboxes[point] = plotted_hitbox
+
+    def onkey(self, event):
+        if event.key == "c":
+            if event.xdata is None or event.ydata is None:
+                return
+            point = Point(event.xdata, event.ydata)
+            self.network.add_calculation_point(point)
+        elif event.key == "right":
+            xlim = self.ax.get_xlim()
+            self.ax.set_xlim([xlim[0] + 1,
+                              xlim[1] + 1])
+        elif event.key == "left":
+            xlim = self.ax.get_xlim()
+            self.ax.set_xlim([xlim[0] - 1,
+                              xlim[1] - 1])
+        elif event.key == "up":
+            ylim = self.ax.get_ylim()
+            self.ax.set_ylim([ylim[0] + 1,
+                              ylim[1] + 1])
+        elif event.key == "down":
+            ylim = self.ax.get_ylim()
+            self.ax.set_ylim([ylim[0] - 1,
+                              ylim[1] - 1])
+        else:
+            print("Invalid input!")
+
+        self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
+
+    def onclick(self, event):
+        if PRINT_CLICK_INFO:
+            print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+                  ('double' if event.dblclick else 'single', event.button,
+                   event.x, event.y, event.xdata, event.ydata))
+        if event.button == MouseButton.RIGHT:
+            return
+        elif event.button == MouseButton.LEFT:
+            if event.xdata is None or event.ydata is None:
+                return
+            self.reset_plotted_point_colors()
+            point = Point(event.xdata, event.ydata)
+            self.network.add_point(point)
+        elif event.button == MouseButton.MIDDLE:
+            if event.xdata is None or event.ydata is None:
+                return
+            point = Point(event.xdata, event.ydata)
+            self.network.add_calculation_point(point)
+        else:
+            print("Invalid input!")
+
+        self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
+        if not NO_CURSOR:
+            self.create_cursor()
+
+    def zoom(self, event):
+        # get the current x and y limits
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        if event.button == 'down':
+            # zoom in
+            if self.zoom_level == 3:
+                print("max zoom in")
+                return
+            self.zoom_level += 1
+            self.ax.set_xlim(xlim[0] + 1,
+                             xlim[1] - 1)
+            self.ax.set_ylim(ylim[0] + 1,
+                             ylim[1] - 1)
+        elif event.button == 'up':
+            # zoom out
+            if self.zoom_level == -10:
+                print("max zoom out")
+                return
+            self.zoom_level -= 1
+            self.ax.set_xlim(xlim[0] - 1,
+                             xlim[1] + 1)
+            self.ax.set_ylim(ylim[0] - 1,
+                             ylim[1] + 1)
+        else:
+            print("weird things with zoom!")
+        self.redraw()  # force re-draw
+
+    def reset_zoom_and_panning(self):
+        self.ax.set_xlim(*DEFAULT_XLIM)
+        self.ax.set_ylim(*DEFAULT_YLIM)
+        self.redraw()  # force re-draw
+
     def redraw(self):
         self.longest_road_label.config(
             text=f"Longest road length: {self.network.stats['longest_road_length']}")
@@ -218,6 +361,7 @@ class UI:
                 if self.show_hitboxes.get() == 1:
                     self.plot_hitbox(point)
 
+        # remove c points
         if self.network.calculation_points:
             if len(self.network.calculation_points) == 1:
                 network_calc_points = [self.network.calculation_points[0][0]]
@@ -230,6 +374,7 @@ class UI:
                     self.remove_plotted_point(
                         calculation_point, point_type=PointType.CALCULATION)
 
+        # add c points
         if self.network.calculation_points:
             if len(self.network.calculation_points) == 1:
                 network_calc_points = [self.network.calculation_points[0][0]]
@@ -255,149 +400,6 @@ class UI:
                 x, y, linewidth=ROAD_WIDTH, color=HPATH_COLOR, zorder=0)[0]
 
         self.canvas.draw()
-
-    def reset_plotted_point_colors(self):
-        for plotted_point in self.plotted_points.values():
-            plotted_point.set_color(NORMAL_P_COLOR)
-
-    def remove_plotted_point(self, point, point_type: PointType):
-        match point_type:
-            case PointType.NORMAL:
-                point_storage = self.plotted_points
-            case PointType.SELECTED:
-                point_storage = self.plotted_points
-            case PointType.CALCULATION:
-                point_storage = self.plotted_calculation_points
-        if point not in point_storage:
-            print("POINT NOT IN PLOTTED_POINTS DICT KEYS!")
-            return
-        point_storage[point].remove()
-        del point_storage[point]
-
-    def remove_plotted_road(self, road):
-        if road not in self.plotted_lines.keys():
-            print("ROAD NOT IN PLOTTED_LINES DICT KEYS!")
-            return
-        self.plotted_lines[road].remove()
-        del self.plotted_lines[road]
-
-    def remove_plotted_hitbox(self, point: Point):
-        if point not in self.plotted_hitboxes.keys():
-            return
-        self.plotted_hitboxes[point].remove()
-        del self.plotted_hitboxes[point]
-
-    def plot_road(self, road):
-        plotted_line = self.ax.plot(
-            road.xy[0], road.xy[1], linewidth=ROAD_WIDTH, color=ROAD_COLOR,
-            path_effects=[
-                pe.Stroke(linewidth=5, foreground='black'), pe.Normal()],
-            zorder=0, label=f"Road {self.counter()}, length {road.length}")[0]
-        self.plotted_lines[road] = plotted_line
-
-    def plot_point(self, point, point_type: PointType):
-        color = None
-        point_storage = self.plotted_points
-        match point_type:
-            case PointType.NORMAL:
-                color = NORMAL_P_COLOR
-            case PointType.SELECTED:
-                color = SELECTED_P_COLOR
-            case PointType.CALCULATION:
-                color = CALCULATION_P_COLOR
-                point_storage = self.plotted_calculation_points
-        plotted_point = self.ax.plot(
-            *point.xy, f"{color}o")[0]
-        point_storage[point] = plotted_point
-
-    def plot_hitbox(self, point):
-        plotted_hitbox = self.ax.plot(*create_hitbox(point).exterior.xy)[0]
-        self.plotted_hitboxes[point] = plotted_hitbox
-
-    def onkey(self, event):
-        if event.key == "c":
-            if event.xdata is None or event.ydata is None:
-                return
-            point = Point(event.xdata, event.ydata)
-            output = self.network.add_calculation_point(point)
-        elif event.key == "right":
-            xlim = self.ax.get_xlim()
-            self.ax.set_xlim([xlim[0] + 1,
-                              xlim[1] + 1])
-        elif event.key == "left":
-            xlim = self.ax.get_xlim()
-            self.ax.set_xlim([xlim[0] - 1,
-                              xlim[1] - 1])
-        elif event.key == "up":
-            ylim = self.ax.get_ylim()
-            self.ax.set_ylim([ylim[0] + 1,
-                              ylim[1] + 1])
-        elif event.key == "down":
-            ylim = self.ax.get_ylim()
-            self.ax.set_ylim([ylim[0] - 1,
-                              ylim[1] - 1])
-        else:
-            print("Invalid input!")
-
-        self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
-
-    def onclick(self, event):
-        if PRINT_CLICK_INFO:
-            print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
-                  ('double' if event.dblclick else 'single', event.button,
-                   event.x, event.y, event.xdata, event.ydata))
-        if event.button == MouseButton.RIGHT:
-            return
-        elif event.button == MouseButton.LEFT:
-            if event.xdata is None or event.ydata is None:
-                return
-            self.reset_plotted_point_colors()
-            point = Point(event.xdata, event.ydata)
-            self.network.add_point(point)
-        elif event.button == MouseButton.MIDDLE:
-            if event.xdata is None or event.ydata is None:
-                return
-            point = Point(event.xdata, event.ydata)
-            output = self.network.add_calculation_point(point)
-        else:
-            print("Invalid input!")
-
-        self.redraw()  # CHECKS ENTIRE MAP FOR THINGS TO REDRAW
-        if not NO_CURSOR:
-            self.create_cursor()
-
-    def zoom(self, event):
-        # get the current x and y limits
-        xlim = self.ax.get_xlim()
-        ylim = self.ax.get_ylim()
-        if event.button == 'down':
-            # zoom in
-            if self.zoom_level == 3:
-                print("max zoom in")
-                return
-            self.zoom_level += 1
-            self.ax.set_xlim(xlim[0] + 1,
-                             xlim[1] - 1)
-            self.ax.set_ylim(ylim[0] + 1,
-                             ylim[1] - 1)
-        elif event.button == 'up':
-            # zoom out
-            if self.zoom_level == -10:
-                print("max zoom out")
-                return
-            self.zoom_level -= 1
-            self.ax.set_xlim(xlim[0] - 1,
-                             xlim[1] + 1)
-            self.ax.set_ylim(ylim[0] - 1,
-                             ylim[1] + 1)
-        else:
-            print("weird things with zoom!")
-        self.redraw()  # force re-draw
-
-    def reset_zoom_and_panning(self):
-        self.ax.set_xlim(*DEFAULT_XLIM)
-        self.ax.set_ylim(*DEFAULT_YLIM)
-        self.redraw()  # force re-draw
 
     def build_ui_elements(self):
         rows = 3
